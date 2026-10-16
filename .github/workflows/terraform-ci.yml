@@ -136,16 +136,26 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The release binary rather than terraform-docs/gh-actions: its latest
+      # release (v1.4.1) bundles terraform-docs 0.20.0, whose tables differ from
+      # the 0.24.0 that contributors run. Bump both values together; Dependabot
+      # cannot see them.
+      - name: Install terraform-docs
+        env:
+          TERRAFORM_DOCS_VERSION: 0.24.0
+          TERRAFORM_DOCS_SHA256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
+        run: |
+          archive="${RUNNER_TEMP}/terraform-docs.tar.gz"
+          curl -fsSL -o "${archive}" \
+            "https://github.com/terraform-docs/terraform-docs/releases/download/v${TERRAFORM_DOCS_VERSION}/terraform-docs-v${TERRAFORM_DOCS_VERSION}-linux-amd64.tar.gz"
+          echo "${TERRAFORM_DOCS_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "${archive}" -C "${RUNNER_TEMP}" terraform-docs
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+
       # Fails when the generated Inputs/Outputs tables in README.md are stale.
       # Regenerate locally with: terraform-docs .
-      - uses: terraform-docs/gh-actions@6de6da0cefcc6b4b7a5cbea4d79d97060733093c # v1.4.1
-        with:
-          working-dir: .
-          config-file: .terraform-docs.yml
-          output-file: README.md
-          output-method: inject
-          fail-on-diff: true
-          git-push: false
+      - name: README tables are current
+        run: terraform-docs --output-check .
 
       # Every page under docs/, the README and the rest. The module's
       # .markdownlint-cli2.jsonc (from the template) sets the rules.
