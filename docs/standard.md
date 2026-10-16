@@ -346,7 +346,7 @@ must test both ends of it; a committed lock file would pin every job to one vers
 and tell consumers nothing, because Terraform ignores a module's lock file. Consuming
 root configurations commit their lock file as usual.
 
-### Version baseline (checked 2026-10-12)
+### Version baseline (checked 2026-10-16)
 
 The current releases, from the HashiCorp registry, the Terraform checkpoint API and
 each project's GitHub releases. Recheck before raising a floor; never copy these into
@@ -354,14 +354,14 @@ a module as upper bounds.
 
 | Component | Current | Used where |
 | --- | --- | --- |
-| Terraform | 1.16.5 | CI `latest`; consumers' roots |
+| Terraform | 1.16.6 | CI `latest`; consumers' roots |
 | Terraform floor for new modules | 1.9 (CI tests 1.9.8) | `required_version` |
-| `hashicorp/aws` | 6.68.0 | CI `latest`; floor `>= 6.0` unless a feature needs more |
+| `hashicorp/aws` | 6.69.1 | CI `latest`; floor `>= 6.0` unless a feature needs more |
 | `hashicorp/random`, `null`, `archive` | 3.9.1, 3.3.2, 2.8.1 | only where used |
 | TFLint / `tflint-ruleset-aws` | 0.64.0 / 0.49.0 | shared CI, `.tflint.hcl` |
-| Checkov | 3.3.26 (`checkov-action` v12.3131.0) | shared CI |
+| Checkov | 3.3.26 (`checkov-action` v12.3131.0, as pinned; Dependabot proposes newer tags) | shared CI |
 | terraform-docs | 0.24.0 (release binary, checksum checked in the shared workflow) | shared CI, pre-commit |
-| release-please | 17.11.2 (`release-please-action` v5.0.0) | shared release workflow |
+| release-please | 17.6.0, bundled in `release-please-action` v5.0.0, the newest Action release (release-please itself is at 17.11.2) | shared release workflow |
 
 Terraform features the modules use, and the version that introduced each:
 `moved` (1.1), preconditions and postconditions (1.2), `optional()` attributes with
