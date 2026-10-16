@@ -1,0 +1,63 @@
+# Reusable release workflow for Terraform module repositories.
+#
+# Called from each module repository's .github/workflows/release-please.yml on
+# every push to main. release-please reads the Conventional Commits since the
+# last release, keeps one release pull request up to date, and when that PR is
+# merged creates the tag vX.Y.Z and the GitHub Release.
+#
+# It authenticates as a GitHub App, not as GITHUB_TOKEN, because pull requests
+# opened with GITHUB_TOKEN never trigger the CI workflow, so the release PR
+# could never satisfy the required status check.
+
+name: Terraform module release
+
+on:
+  workflow_call:
+    secrets:
+      RELEASE_APP_CLIENT_ID:
+        description: Client ID of the release GitHub App (Contents, Pull requests and Issues read/write).
+        required: true
+      RELEASE_APP_PRIVATE_KEY:
+        description: Private key of the release GitHub App.
+        required: true
+
+permissions: {}
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Summary
+        env:
+          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+          PR: ${{ steps.release.outputs.pr }}
+        run: |
+          if [ "$RELEASE_CREATED" = "true" ]; then
+            echo "Released $TAG" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$PR" ]; then
+            echo "Release pull request updated: $(echo "$PR" | jq -r '.number')" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No releasable commits since the last release." >> "$GITHUB_STEP_SUMMARY"
+          fi

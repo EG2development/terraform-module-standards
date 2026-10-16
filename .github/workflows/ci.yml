@@ -1,0 +1,73 @@
+# Checks for this repository: the shared workflows, the scripts, the rulesets
+# and the documentation. Nothing here touches a cloud account.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-title:
+    name: PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  check:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rulesets are valid JSON with the fields GitHub requires
+        run: |
+          for f in rulesets/*.json; do
+            jq -e '.name and .target and .enforcement and (.rules | type == "array")' "$f" > /dev/null
+            echo "ok $f"
+          done
+
+      - name: Shell scripts
+        run: |
+          shellcheck -S warning scripts/*.sh
+          bash -n scripts/*.sh
+
+      - name: Workflows
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          BASE="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          curl -sSfL "${BASE}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tgz
+          tar -xzf /tmp/actionlint.tgz -C /tmp actionlint
+          /tmp/actionlint -color
+
+      - name: Markdown
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
+        with:
+          globs: "**/*.md"
+
+  ci-ok:
+    # Named to match the status check the shared ruleset requires. In module
+    # repositories the same name comes from calling the reusable workflow from a
+    # job called "ci".
+    name: ci / CI passed
+    if: always()
+    needs: [pr-title, check]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -e '
+            [ to_entries[]
+              | select(.value.result != "success")
+              | select((.key == "pr-title" and .value.result == "skipped") | not)
+            ] | length == 0' > /dev/null
