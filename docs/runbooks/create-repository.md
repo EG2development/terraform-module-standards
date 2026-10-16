@@ -33,7 +33,7 @@ Skip this section if `${OWNER}/terraform-module-standards` already exists.
 | Organisation plan | Repository visibility | Rulesets, CODEOWNERS, required checks |
 | --- | --- | --- |
 | Free | Public | Enforced |
-| Free | Private | **Not enforced.** The import succeeds and nothing happens |
+| Free | Private | **Not available.** GitHub refuses the rulesets, so nothing is enforced |
 | Team or Enterprise | Either | Enforced |
 
 ```bash
@@ -225,4 +225,4 @@ All checks `PASS`; the release exists; exactly one tag.
 ## Troubleshooting
 
 See [troubleshooting.md](troubleshooting.md): "release-please opened 0.1.0", "the
-release pull request has no checks", "rulesets imported but nothing is enforced".
+release pull request has no checks", "creating a ruleset fails".

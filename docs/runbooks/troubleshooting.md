@@ -50,7 +50,7 @@ Find your symptom. Each row names where the fix lives.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Rulesets imported, but direct pushes to `main` still work | Private repository on GitHub Free: rulesets are not enforced | Make the repository public or move the organisation to GitHub Team; `gh api repos/${OWNER}/${REPO}/rules/branches/main` lists what is in effect |
+| Creating a ruleset fails with "Upgrade to GitHub Pro or make this repository public to enable this feature" | Private repository on GitHub Free: rulesets are not available | Make the repository public or move the organisation to GitHub Team; `gh api repos/${OWNER}/${REPO}/rules/branches/main` lists what is in effect |
 | CODEOWNERS review is never requested | Team has no write access, or the team name is wrong | `gh api repos/${OWNER}/${REPO}/codeowners/errors`; grant the team maintain access |
 | `gh api ... --input rulesets/main.json` returns 422 | A read-only field (`id`, `source`) in the JSON, or a ruleset with that name already exists | Use the files from `terraform-module-standards/rulesets/`; the script updates an existing ruleset by name |
 | Reusable workflow: `workflow was not found` or `is not accessible` | The standards repository is private and not shared with the organisation, or the plan does not allow it | `gh api -X PUT repos/${OWNER}/terraform-module-standards/actions/permissions/access -f access_level=organization`; or make it public |

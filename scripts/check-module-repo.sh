@@ -157,7 +157,7 @@ if [ -n "$REPO" ]; then
         fail "no tag ruleset on ${REPO}"
       fi
       EFFECTIVE="$(gh api "repos/${REPO}/rules/branches/$(j .default_branch)" --jq 'length' 2> /dev/null || echo 0)"
-      [ "${EFFECTIVE}" -gt 0 ] && pass "GitHub reports ${EFFECTIVE} rule(s) in effect on $(j .default_branch)" || warn "GitHub reports no rules in effect on $(j .default_branch); on GitHub Free, private repositories enforce no rulesets"
+      [ "${EFFECTIVE}" -gt 0 ] && pass "GitHub reports ${EFFECTIVE} rule(s) in effect on $(j .default_branch)" || warn "GitHub reports no rules in effect on $(j .default_branch); on GitHub Free, private repositories cannot have rulesets"
       CO_ERR="$(gh api "repos/${REPO}/codeowners/errors" --jq '.errors | length' 2> /dev/null || echo "?")"
       [ "$CO_ERR" = "0" ] && pass "CODEOWNERS has no errors" || warn "CODEOWNERS errors: ${CO_ERR} (gh api repos/${REPO}/codeowners/errors)"
       SECRETS="$(gh secret list --repo "$REPO" 2> /dev/null | awk '{print $1}' || true)"
