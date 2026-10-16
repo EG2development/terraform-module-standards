@@ -419,9 +419,11 @@ Plan constraints, as GitHub documents them:
 
 - Rulesets, CODEOWNERS enforcement and branch protection work on **public**
   repositories on every plan, and on private repositories only on GitHub Pro, Team or
-  Enterprise. On GitHub Free a private repository imports the rulesets and enforces
-  nothing. Decide visibility, or the plan, before the first module repository is
-  created ([create-repository.md](runbooks/create-repository.md), step 0).
+  Enterprise. On GitHub Free the API refuses a ruleset on a private repository
+  ("Upgrade to GitHub Pro or make this repository public to enable this feature"),
+  so nothing protects `main` or the tags. Decide visibility, or the plan, before the
+  first module repository is created
+  ([create-repository.md](runbooks/create-repository.md), step 0).
 - Organisation-level rulesets need GitHub Team or Enterprise. When the organisation
   is on such a plan, import the same two files once at organisation level, targeting
   repositories named `terraform-aws-*`, and stop importing them per repository. The

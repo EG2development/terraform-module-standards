@@ -77,7 +77,7 @@ if [ "$OWNER_TYPE" = "Organization" ]; then
   echo "organisation plan: ${PLAN}"
   if [ "$PLAN" = "free" ] && [ "$VISIBILITY" = "private" ]; then
     warn "GitHub Free enforces rulesets and CODEOWNERS on PUBLIC repositories only."
-    warn "A private repository on this plan imports the rulesets but enforces nothing. See docs/standard.md, section 12."
+    warn "GitHub refuses rulesets on a private repository on this plan, so the ruleset step will fail. See docs/standard.md, section 12."
   fi
   if [ -z "$TEAM" ]; then
     warn "--team not given; CODEOWNERS will keep the __TEAM__ placeholder and GitHub will ignore it"
@@ -108,7 +108,10 @@ log "Replace template placeholders"
 if $DRY_RUN; then
   echo "+ perl -pi -e 's/__OWNER__/${OWNER}/g; s/__TEAM__/${TEAM:-__TEAM__}/g; s/__MODULE__/${NAME}/g; s/__DESCRIPTION__/${DESCRIPTION}/g' <files containing placeholders>"
 else
-  mapfile -t FILES < <(cd "$DEST" && grep -rlI --exclude-dir=.git -e '__OWNER__' -e '__TEAM__' -e '__MODULE__' -e '__DESCRIPTION__' . || true)
+  # A read loop rather than mapfile, which needs bash 4; macOS ships bash 3.2.
+  FILES=()
+  while IFS= read -r f; do FILES+=("$f"); done \
+    < <(cd "$DEST" || exit; grep -rlI --exclude-dir=.git -e '__OWNER__' -e '__TEAM__' -e '__MODULE__' -e '__DESCRIPTION__' . || true)
   # CODEOWNERS is rewritten even when the template already names a team, so --team wins.
   [ -n "$TEAM" ] && [ -f "$DEST/.github/CODEOWNERS" ] && FILES+=("./.github/CODEOWNERS")
   if [ "${#FILES[@]}" -gt 0 ]; then
