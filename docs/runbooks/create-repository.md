@@ -67,6 +67,10 @@ gh repo edit "${OWNER}/terraform-module-standards" --enable-squash-merge --enabl
   --squash-merge-commit-message pr-title-description
 # Let other repositories call the reusable workflows (needed only when private).
 [ "${VISIBILITY}" = "private" ] && gh api -X PUT "repos/${OWNER}/terraform-module-standards/actions/permissions/access" -f access_level=organization
+# Let Dependabot in the module repositories resolve those workflows (needed only when
+# private; without it every module's Dependabot run fails with git_dependencies_not_reachable).
+[ "${VISIBILITY}" = "private" ] && jq -n --argjson id "$(gh api "repos/${OWNER}/terraform-module-standards" --jq .id)" \
+  '{repository_ids_to_add: [$id]}' | gh api -X PATCH "orgs/${OWNER}/dependabot/repository-access" --input -
 for f in rulesets/main.json rulesets/release-tags.json; do
   gh api -X POST "repos/${OWNER}/terraform-module-standards/rulesets" --input "$f" > /dev/null && echo "applied $f"
 done
