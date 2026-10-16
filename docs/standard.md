@@ -359,8 +359,8 @@ a module as upper bounds.
 | `hashicorp/aws` | 6.68.0 | CI `latest`; floor `>= 6.0` unless a feature needs more |
 | `hashicorp/random`, `null`, `archive` | 3.9.1, 3.3.2, 2.8.1 | only where used |
 | TFLint / `tflint-ruleset-aws` | 0.64.0 / 0.49.0 | shared CI, `.tflint.hcl` |
-| Checkov | 3.3.27 (`checkov-action` v12.3131.0) | shared CI |
-| terraform-docs | 0.24.0 (`terraform-docs/gh-actions` v1.4.1) | shared CI, pre-commit |
+| Checkov | 3.3.26 (`checkov-action` v12.3131.0) | shared CI |
+| terraform-docs | 0.24.0 (release binary, checksum checked in the shared workflow) | shared CI, pre-commit |
 | release-please | 17.11.2 (`release-please-action` v5.0.0) | shared release workflow |
 
 Terraform features the modules use, and the version that introduced each:
@@ -463,7 +463,8 @@ Commit, and a rebase lets unreviewed local messages reach `main`.
 | Terraform CLI | CI tests `latest` every week; `terraform-min-version` is raised deliberately in a `feat!:` pull request | CI on both matrix entries |
 | AWS provider | No upper bound; CI tests the latest weekly. A new minimum is a `feat!:` pull request | CI, including Checkov and tests |
 | TFLint and its AWS ruleset | Versions live in the shared workflow and in the template's `.tflint.hcl`. Bump centrally; the compliance check reports modules whose `.tflint.hcl` drifted | Standards repository CI, then each module's next run |
-| Checkov, terraform-docs, setup actions | Pinned by SHA in the shared workflow; Dependabot bumps them there | Standards repository CI |
+| Checkov, setup actions | Pinned by SHA in the shared workflow; Dependabot bumps them there | Standards repository CI |
+| terraform-docs | Version and SHA-256 in the shared workflow's Docs job. Dependabot cannot see them: bump both by hand when a release appears | Standards repository CI |
 | pre-commit hooks | `pre-commit autoupdate` in the template, monthly, copied to modules when they next change | Local run |
 
 Every update still goes through `fmt`, `validate`, `lint`, `security` and `tests`,
