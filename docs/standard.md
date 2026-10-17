@@ -150,6 +150,12 @@ The integration branch costs one more pull request per release and a sync that h
 stay healthy. `scripts/promote.sh` makes the sync a precondition rather than a memory
 exercise, and the release workflow performs it.
 
+Diagram: [`docs/diagrams/release-flow.png`](diagrams/release-flow.png) (the flow, the
+promotion description, the version rules and the tokens) and
+[`docs/diagrams/governance.png`](diagrams/governance.png) (who may do what on which
+branch, the three rulesets, and what the plan enforces). Both pages are in
+[`docs/diagrams/branching-and-release.drawio`](diagrams/branching-and-release.drawio).
+
 The model applies to module repositories and to the root configurations that consume
 them. `terraform-module-standards` and `terraform-aws-module-template` release nothing
 and are consumed at `@main` or by copy, so they keep a single `main` and take pull
