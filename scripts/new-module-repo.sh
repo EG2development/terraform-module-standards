@@ -157,6 +157,14 @@ elif gh api "repos/${FULL}/git/ref/heads/dev" > /dev/null 2>&1; then
 else
   gh api -X POST "repos/${FULL}/git/refs" -f ref=refs/heads/dev -f sha="$MAIN_SHA" > /dev/null && echo "created dev at ${MAIN_SHA:0:7}"
 fi
+# dev is the default branch: new pull requests, Dependabot (security updates
+# included), agents and scheduled workflows all land on dev. main stays the
+# release branch: release-please targets it explicitly and the rulesets name it.
+if $DRY_RUN; then
+  echo "+ gh api -X PATCH repos/${FULL} -f default_branch=dev"
+elif [ -n "$MAIN_SHA" ]; then
+  gh api -X PATCH "repos/${FULL}" -f default_branch=dev --jq '"default branch: " + .default_branch'
+fi
 
 log "Repository settings: squash merges only, PR title + body as the commit, branch clean-up"
 SETTINGS="$(jq -n '{

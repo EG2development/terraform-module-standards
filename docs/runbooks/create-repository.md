@@ -126,8 +126,8 @@ cd ~/src   # wherever you keep clones
 ```
 
 The script creates the repository from the template, grants the team maintain access,
-replaces the placeholders, pushes that one commit, creates the `dev` branch from it,
-sets squash-only merging, enables Dependabot, secret scanning and immutable releases,
+replaces the placeholders, pushes that one commit, creates the `dev` branch from it
+and makes it the default branch, sets squash-only merging, enables Dependabot, secret scanning and immutable releases,
 adds topics and imports the three rulesets. Re-running it is safe.
 
 ### 2. Check the empty repository
@@ -135,6 +135,7 @@ adds topics and imports the three rulesets. Re-running it is safe.
 ```bash
 gh repo view "${OWNER}/terraform-aws-${NAME}" --json name,visibility,isTemplate,repositoryTopics
 gh api "repos/${OWNER}/terraform-aws-${NAME}/branches/dev" --jq .name                      # expect dev
+gh api "repos/${OWNER}/terraform-aws-${NAME}" --jq .default_branch                         # expect dev
 gh api "repos/${OWNER}/terraform-aws-${NAME}/rulesets" --jq '.[] | "\(.target)\t\(.name)\t\(.enforcement)"'
 gh api "repos/${OWNER}/terraform-aws-${NAME}/codeowners/errors" --jq '.errors | length'   # expect 0
 ```

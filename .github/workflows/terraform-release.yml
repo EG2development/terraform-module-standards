@@ -26,6 +26,36 @@ on:
 permissions: {}
 
 jobs:
+  # Every commit on main must be the squash of a pull request from dev or from
+  # release-please. A push that is not turns this job red and annotates the run;
+  # the rulesets prevent it where the plan enforces them, this job records it
+  # everywhere. It never blocks the release or the sync.
+  guard:
+    name: push to main came from dev or release-please
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: The pushed commit is the merge of an allowed pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          PUSHER: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          HEADS="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" --jq '[.[] | select(.merged_at != null and .base.ref == "main") | .head.ref] | join(" ")')"
+          case " ${HEADS} " in
+            *" dev "*|*" release-please--branches--main "*)
+              echo "ok: ${SHA:0:7} merged from ${HEADS}" >> "$GITHUB_STEP_SUMMARY" ;;
+            *)
+              echo "::error title=direct push to main::${SHA:0:7} by ${PUSHER} is not the merge of a pull request from dev or release-please (found: '${HEADS:-none}'). main accepts those two sources only."
+              echo "Direct push to main detected: ${SHA:0:7} by ${PUSHER}" >> "$GITHUB_STEP_SUMMARY"
+              exit 1 ;;
+          esac
+
   release-please:
     name: release-please
     # Releases come from main only. The caller triggers on push to main; this
