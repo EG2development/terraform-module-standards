@@ -37,11 +37,24 @@ jobs:
     timeout-minutes: 3
     permissions:
       contents: read
-      pull-requests: read
     steps:
+      # A called workflow holds no more than its caller grants, and the callers
+      # grant contents: read only, so the pull-request lookup uses a read-only
+      # App token. Asking GITHUB_TOKEN for pull-requests: read here fails the
+      # whole run at startup.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-pull-requests: read
+
       - name: The pushed commit is the merge of an allowed pull request
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           SHA: ${{ github.sha }}
           PUSHER: ${{ github.actor }}
         run: |
