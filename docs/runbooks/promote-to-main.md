@@ -12,8 +12,8 @@ commit on `main` whose description lists every change.
 - `dev` contains `main`. The release workflow merges `main` into `dev` after every push
   to `main`; the script checks and refuses otherwise.
 - You are not the only reviewer: the promotion needs an approval from someone other
-  than the person who opened it (or the repository-admin bypass, recorded in the audit
-  log, in a single-maintainer organisation).
+  than the person who opened it (or the organisation-owner bypass, recorded in the
+  audit log, in a single-maintainer organisation).
 
 ```bash
 STANDARDS=~/src/terraform-module-standards   # a clone of this repository

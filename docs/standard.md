@@ -459,20 +459,23 @@ never moves the release rules.
 | `dev` | Require a pull request | 1 approving review, stale reviews dismissed on push, approval of the most recent push, conversation resolution required, squash is the only merge method |
 | `dev` | Required status checks | `ci / CI passed`; the branch need not be up to date (an integration branch moves too fast for that) |
 | `dev` | Block deletion and force-push | On |
-| `dev` | Bypass | The release App, always: it pushes the `main → dev` sync. Repository admins, pull-request mode (see below) |
+| `dev` | Bypass | The release App, always: it pushes the `main → dev` sync. Organisation owners, pull-request mode (see below) |
 | `main` | Require a pull request | 1 approving review, stale reviews dismissed on push, code owner review required, approval of the most recent push, conversation resolution required, squash is the only merge method |
 | `main` | Required status checks | `ci / CI passed`, branch must be up to date |
 | `main` | Block deletion and force-push | On |
 | `main` | Linear history | On (squash merges make it so) |
-| `main` | Bypass | Repository admins, pull-request mode only. Nobody bypasses on a direct push |
+| `main` | Bypass | Organisation owners, pull-request mode only. Nobody bypasses on a direct push |
 | `release tags` (`refs/tags/v*`) | Block creation, deletion, update and force-push | On. The release App is the only bypass actor, so release-please is the only thing that can create a release tag |
 
-The bootstrap script replaces the placeholder `actor_id: 0` with the release App's ID.
-The repository-admin bypass in pull-request mode exists for an organisation with one
+The bootstrap script replaces the placeholder `actor_id: 0` with the release App's ID
+(the `Integration` actor; GitHub's documentation does not say which ID the type expects,
+so read the ruleset back after the first import and correct the file if needed). The
+organisation-owner bypass in pull-request mode exists for an organisation with one
 maintainer, who could otherwise never merge their own pull request: a bypass merge is
-recorded as such in the audit log. Remove it from both files as soon as a second
-maintainer exists. AI agents are never repository admins, so the bypass is not open to
-them.
+recorded as such in the audit log. `OrganizationAdmin` is used rather than a repository
+role because GitHub documents it (the `actor_id` is ignored) and does not document the
+repository-role IDs. Remove it from both files as soon as a second maintainer exists.
+AI agents are never organisation owners, so the bypass is not open to them.
 
 Plan constraints, as GitHub documents them:
 
