@@ -438,7 +438,7 @@ input in a minor release before removing it in a major one, once module floors r
 | Promotion is human | A maintainer opens the `dev → main` pull request (`scripts/promote.sh`) and a different human approves it. Agents hold no admin role and no bypass, and open pull requests into `dev` only |
 | Required CI | The ruleset requires `ci / CI passed` |
 | Release identity | A GitHub App with Contents, Pull requests and Issues read/write, installed on module repositories only. Its private key is an organisation secret, or a repository secret where the plan does not allow organisation secrets on private repositories |
-| Read access for consumers' CI | A second GitHub App with Contents read-only, installed on module repositories, minted per job with `actions/create-github-app-token`. Never a token in a `source` URL |
+| Read access for consumers' CI | Public module repositories need none: `terraform init` clones them anonymously. While a module repository is private, a second GitHub App with Contents read-only, installed on module repositories, minted per job with `actions/create-github-app-token`. Never a token in a `source` URL |
 
 ## 11. CODEOWNERS
 
