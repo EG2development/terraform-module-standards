@@ -78,6 +78,11 @@ echo "owner ${OWNER} is a ${OWNER_TYPE}; repository ${FULL}; visibility ${VISIBI
 if [ "$OWNER_TYPE" = "Organization" ]; then
   PLAN="$(gh api "orgs/${OWNER}" --jq '.plan.name // "unknown"' 2> /dev/null || echo unknown)"
   echo "organisation plan: ${PLAN}"
+  # In --configure-only mode the repository exists: judge by its real visibility,
+  # not by the --visibility default that only matters at creation.
+  if $CONFIGURE_ONLY; then
+    VISIBILITY="$(gh api "repos/${FULL}" --jq .visibility 2> /dev/null || echo "$VISIBILITY")"
+  fi
   if [ "$PLAN" = "free" ] && [ "$VISIBILITY" = "private" ]; then
     warn "GitHub Free enforces rulesets and CODEOWNERS on PUBLIC repositories only."
     warn "GitHub refuses rulesets on a private repository on this plan, so the ruleset step will fail. See docs/standard.md, section 12."
