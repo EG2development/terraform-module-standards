@@ -139,7 +139,9 @@ if [ -n "$REPO" ]; then
       if gh api "repos/${REPO}/vulnerability-alerts" > /dev/null 2>&1; then pass "Dependabot alerts enabled"; else fail "Dependabot alerts disabled"; fi
       PVR="$(gh api "repos/${REPO}/private-vulnerability-reporting" --jq .enabled 2> /dev/null || echo unknown)"
       [ "$PVR" = "true" ] && pass "private vulnerability reporting enabled (SECURITY.md relies on it)" || warn "private vulnerability reporting: ${PVR}"
-      if gh api "repos/${REPO}/branches/dev" > /dev/null 2>&1; then pass "integration branch dev exists"; else fail "no dev branch (feature work merges into dev; dev is promoted to main)"; fi
+      if gh api "repos/${REPO}/branches/dev" > /dev/null 2>&1; then pass "integration branch dev exists"
+      elif $TEMPLATE; then pass "no dev branch (the template repository is trunk-based)"
+      else fail "no dev branch (feature work merges into dev; dev is promoted to main)"; fi
       RS="$(gh api "repos/${REPO}/rulesets" 2> /dev/null || echo '[]')"
       BR_ID=""; DEV_RS=""
       for id in $(printf '%s' "$RS" | jq -r '.[] | select(.target == "branch") | .id'); do
