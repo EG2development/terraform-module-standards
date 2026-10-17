@@ -126,9 +126,10 @@ cd ~/src   # wherever you keep clones
 ```
 
 The script creates the repository from the template, grants the team maintain access,
-replaces the placeholders, pushes that one commit, creates the `dev` branch from it
-and makes it the default branch, sets squash-only merging, enables Dependabot, secret scanning and immutable releases,
-adds topics and imports the three rulesets. Re-running it is safe.
+replaces the placeholders, pushes that one commit, creates the `dev` branch from it and
+makes it the default branch, sets squash-only merging, enables Dependabot, secret
+scanning and immutable releases, adds topics and imports the three rulesets. Re-running
+it is safe.
 
 ### 2. Check the empty repository
 
