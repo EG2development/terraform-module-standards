@@ -1,3 +1,5 @@
-# Every change to the standard, the shared workflows and the rulesets needs a
-# review from the platform team. Replace the team before publishing.
-* @EG2development/admins
+# Every change to the standard, the shared workflows and the rulesets should be
+# reviewed by the platform team. No team is configured yet. When it exists and
+# has write access to this repository, add it here (teams, not people):
+#   * @ORG/TEAM
+# GitHub ignores a rule whose team cannot be resolved.

@@ -401,6 +401,10 @@ when a different team genuinely owns part of the module, for example
 `/examples/ @OWNER/solutions`. The compliance check calls GitHub's CODEOWNERS
 validation endpoint.
 
+Until the owning team exists, the file holds only the comment and no rule. The
+compliance check then warns instead of failing, and `new-module-repo.sh --team` adds
+the rule when the team is known.
+
 ## 12. Repository rulesets
 
 Two rulesets, identical in every module repository, imported from

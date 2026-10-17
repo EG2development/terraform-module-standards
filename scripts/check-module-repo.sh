@@ -94,7 +94,7 @@ echo "== Workflows and ownership"
 [ -f .github/workflows/ci.yml ] && { grep -q 'terraform-module-standards/.github/workflows/terraform-ci.yml@' .github/workflows/ci.yml && pass "ci.yml calls the shared terraform-ci workflow" || fail "ci.yml does not call terraform-module-standards/.github/workflows/terraform-ci.yml"; }
 [ -f .github/workflows/release-please.yml ] && { grep -q 'terraform-module-standards/.github/workflows/terraform-release.yml@' .github/workflows/release-please.yml && pass "release-please.yml calls the shared terraform-release workflow" || fail "release-please.yml does not call terraform-module-standards/.github/workflows/terraform-release.yml"; }
 if [ -f .github/CODEOWNERS ]; then
-  grep -Eq '^\*\s+@' .github/CODEOWNERS && pass "CODEOWNERS has a default owner" || fail "CODEOWNERS has no '* @owner' rule"
+  grep -Eq '^\*\s+@' .github/CODEOWNERS && pass "CODEOWNERS has a default owner" || warn "CODEOWNERS has no '* @owner' rule yet; add the owning team once it exists"
 fi
 LEFT="$(grep -rlI --exclude-dir=.git --exclude-dir=.terraform -e '__OWNER__' -e '__TEAM__' -e '__MODULE__' -e '__DESCRIPTION__' -e 'REPLACE_ME' . 2> /dev/null || true)"
 if $TEMPLATE; then

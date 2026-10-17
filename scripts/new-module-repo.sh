@@ -112,7 +112,7 @@ else
   FILES=()
   while IFS= read -r f; do FILES+=("$f"); done \
     < <(cd "$DEST" || exit; grep -rlI --exclude-dir=.git -e '__OWNER__' -e '__TEAM__' -e '__MODULE__' -e '__DESCRIPTION__' . || true)
-  # CODEOWNERS is rewritten even when the template already names a team, so --team wins.
+  # CODEOWNERS gets the --team rule whether the template names a team or none, so --team wins.
   [ -n "$TEAM" ] && [ -f "$DEST/.github/CODEOWNERS" ] && FILES+=("./.github/CODEOWNERS")
   if [ "${#FILES[@]}" -gt 0 ]; then
     (
@@ -120,7 +120,13 @@ else
       TEAM_VALUE="${TEAM:-__TEAM__}"
       export OWNER NAME DESCRIPTION TEAM_VALUE
       perl -pi -e 's/__OWNER__/$ENV{OWNER}/g; s/__TEAM__/$ENV{TEAM_VALUE}/g; s/__MODULE__/$ENV{NAME}/g; s/__DESCRIPTION__/$ENV{DESCRIPTION}/g' "${FILES[@]}"
-      [ -n "$TEAM" ] && perl -pi -e 's{^\*\s+\@\S+}{* \@$ENV{OWNER}/$ENV{TEAM_VALUE}}' .github/CODEOWNERS
+      if [ -n "$TEAM" ]; then
+        if grep -Eq '^\*\s+@' .github/CODEOWNERS; then
+          perl -pi -e 's{^\*\s+\@\S+}{* \@$ENV{OWNER}/$ENV{TEAM_VALUE}}' .github/CODEOWNERS
+        else
+          printf '* @%s/%s\n' "$OWNER" "$TEAM" >> .github/CODEOWNERS
+        fi
+      fi
       git add -- "${FILES[@]}"
       git status --short
       if ! git diff --cached --quiet; then
