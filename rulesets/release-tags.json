@@ -1,5 +1,5 @@
 {
-  "name": "release tags - immutable",
+  "name": "release tags - created by release-please only, immutable",
   "target": "tag",
   "enforcement": "active",
   "conditions": {
@@ -9,9 +9,12 @@
     }
   },
   "rules": [
+    { "type": "creation" },
     { "type": "deletion" },
     { "type": "non_fast_forward" },
     { "type": "update", "parameters": { "update_allows_fetch_and_merge": false } }
   ],
-  "bypass_actors": []
+  "bypass_actors": [
+    { "actor_id": 0, "actor_type": "Integration", "bypass_mode": "always" }
+  ]
 }

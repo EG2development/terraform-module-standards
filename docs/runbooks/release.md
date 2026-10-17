@@ -10,7 +10,8 @@ mechanical work; a person reviews and merges one pull request.
 - The repository was created with [create-repository.md](create-repository.md), so
   `release-please.yml` runs on every push to `main` and the release App secrets are
   available.
-- At least one `feat:` or `fix:` (or breaking) pull request has merged since the last
+- A promotion pull request ([promote-to-main.md](promote-to-main.md)) carrying at
+  least one `feat:`, `fix:` or breaking change has merged into `main` since the last
   release. `docs:`, `chore:`, `refactor:`, `test:` and `ci:` alone release nothing.
 
 ```bash
@@ -27,7 +28,8 @@ gh pr list --repo "${OWNER}/${REPO}" --label "autorelease: pending"
 ```
 
 Its title is `chore(main): release X.Y.Z`. release-please recalculates `X.Y.Z` and the
-changelog every time `main` changes, so leave it open until you want to release.
+changelog every time `main` changes, so leave it open until you want to release. Its
+changelog lists the changes from the promotion's description, one entry per line.
 
 ### 2. Review it
 
@@ -59,15 +61,17 @@ automatically. Others follow [upgrade-module-version.md](upgrade-module-version.
 ### First release: `v1.0.0`
 
 The `terraform-module` release type starts at `0.1.0`. To start at `1.0.0`, the
-**first** pull request that lands a `feat:` must end its description with the line:
+**first** pull request into `dev` that lands a `feat:` must end its description with
+the line:
 
 ```text
 Release-As: 1.0.0
 ```
 
-That line must be the last line of the squash commit, so keep it at the bottom of the
-description. release-please then opens `chore(main): release 1.0.0`. Merge it exactly
-as in step 3.
+Keep it at the bottom of the description. `scripts/promote.sh` copies `Release-As:`
+footers into the promotion's description, directly under the change they belong to, so
+the footer reaches `main`. release-please then opens `chore(main): release 1.0.0`.
+Merge it exactly as in step 3.
 
 If the first release pull request already says `0.1.0`, merge a tiny `fix:` pull
 request whose description ends with `Release-As: 1.0.0`; release-please recalculates.
@@ -80,8 +84,14 @@ git ls-remote --tags "https://github.com/${OWNER}/${REPO}.git" "vX.Y.Z"
 gh api "repos/${OWNER}/${REPO}/contents/.release-please-manifest.json" --jq '.content' | base64 -d
 ```
 
-The release exists, the tag points at the merge commit of the release pull request,
-and the manifest holds the new version.
+The release exists, the tag points at the squash commit of the release pull request,
+and the manifest holds the new version. Then:
+
+```bash
+git fetch origin && git merge-base --is-ancestor origin/main origin/dev && echo "dev contains main"
+```
+
+The `sync dev with main` job merged the release commit back into `dev`.
 
 ## Rollback
 
@@ -99,6 +109,8 @@ withdraw a release:
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | No release pull request after merging | No `feat`/`fix`/breaking commit since the last release, or the squash commit title is not a Conventional Commit | `git log --oneline vLAST..main`; a bad title cannot be rewritten on `main`, so merge an empty `fix:` pull request that describes the change |
+| A change merged into `dev` is missing from the release pull request | The promotion was merged with a merge commit, or its description lost the line | Edit the merged promotion pull request's description: add a `BEGIN_COMMIT_OVERRIDE` … `END_COMMIT_OVERRIDE` block listing every change, one header per line at column 0; rerun the release workflow ([promote-to-main.md](promote-to-main.md), Troubleshooting) |
+| `promote.sh` says `dev does not contain main` | The `sync dev with main` job has not run or failed | `gh workflow run release-please.yml --ref main`; on a conflict, open a pull request from `main` into `dev` and merge it with a merge commit |
 | Release pull request has no status checks and cannot merge | release-please ran as `GITHUB_TOKEN` | Check the `RELEASE_APP_*` secrets reach the repository; `gh secret list --repo ${OWNER}/${REPO}` |
 | Version is wrong | A title said `feat` where `fix` was meant, or `!` was missing | Add a footer in a follow-up pull request: `Release-As: X.Y.Z` |
 | The release workflow failed on "Resource not accessible by integration" | The App lacks a permission | Add Contents, Pull requests and Issues read/write to the App and re-run |

@@ -93,6 +93,9 @@ fi
 echo "== Workflows and ownership"
 [ -f .github/workflows/ci.yml ] && { grep -q 'terraform-module-standards/.github/workflows/terraform-ci.yml@' .github/workflows/ci.yml && pass "ci.yml calls the shared terraform-ci workflow" || fail "ci.yml does not call terraform-module-standards/.github/workflows/terraform-ci.yml"; }
 [ -f .github/workflows/release-please.yml ] && { grep -q 'terraform-module-standards/.github/workflows/terraform-release.yml@' .github/workflows/release-please.yml && pass "release-please.yml calls the shared terraform-release workflow" || fail "release-please.yml does not call terraform-module-standards/.github/workflows/terraform-release.yml"; }
+[ -f .github/workflows/release-please.yml ] && { grep -q 'workflow_dispatch' .github/workflows/release-please.yml && pass "release-please.yml can be rerun with workflow_dispatch" || warn "release-please.yml has no workflow_dispatch trigger (needed to rerun a failed release or the dev sync)"; }
+[ -f .github/workflows/ci.yml ] && { grep -Eq 'branches: *\[ *dev' .github/workflows/ci.yml && pass "ci.yml runs on pushes to dev" || warn "ci.yml does not run on pushes to dev (push: branches: [dev, main])"; }
+[ -f .github/dependabot.yml ] && { grep -q 'target-branch: dev' .github/dependabot.yml && pass "Dependabot version updates target dev" || warn "dependabot.yml has no 'target-branch: dev'; version updates would target the default branch"; }
 if [ -f .github/CODEOWNERS ]; then
   grep -Eq '^\*\s+@' .github/CODEOWNERS && pass "CODEOWNERS has a default owner" || warn "CODEOWNERS has no '* @owner' rule yet; add the owning team once it exists"
 fi
@@ -136,10 +139,19 @@ if [ -n "$REPO" ]; then
       if gh api "repos/${REPO}/vulnerability-alerts" > /dev/null 2>&1; then pass "Dependabot alerts enabled"; else fail "Dependabot alerts disabled"; fi
       PVR="$(gh api "repos/${REPO}/private-vulnerability-reporting" --jq .enabled 2> /dev/null || echo unknown)"
       [ "$PVR" = "true" ] && pass "private vulnerability reporting enabled (SECURITY.md relies on it)" || warn "private vulnerability reporting: ${PVR}"
+      if gh api "repos/${REPO}/branches/dev" > /dev/null 2>&1; then pass "integration branch dev exists"; else fail "no dev branch (feature work merges into dev; dev is promoted to main)"; fi
       RS="$(gh api "repos/${REPO}/rulesets" 2> /dev/null || echo '[]')"
-      BR_ID="$(printf '%s' "$RS" | jq -r '[.[] | select(.target == "branch")][0].id // empty')"
+      BR_ID=""; DEV_RS=""
+      for id in $(printf '%s' "$RS" | jq -r '.[] | select(.target == "branch") | .id'); do
+        INCL="$(gh api "repos/${REPO}/rulesets/${id}" --jq '.conditions.ref_name.include[]' 2> /dev/null || true)"
+        printf '%s\n' "$INCL" | grep -qx 'refs/heads/main' && BR_ID="$id"
+        printf '%s\n' "$INCL" | grep -qx 'refs/heads/dev' && DEV_RS="$id"
+      done
+      [ -z "$BR_ID" ] && BR_ID="$(printf '%s' "$RS" | jq -r '[.[] | select(.target == "branch")][0].id // empty')"
+      [ -n "$DEV_RS" ] && pass "a ruleset targets refs/heads/dev" || warn "no ruleset targets refs/heads/dev"
       if [ -n "$BR_ID" ]; then
         BR="$(gh api "repos/${REPO}/rulesets/${BR_ID}")"
+        printf '%s' "$BR" | jq -e '.conditions.ref_name.include | index("refs/heads/main")' > /dev/null && pass "main ruleset targets refs/heads/main by name" || warn "main ruleset targets '$(printf '%s' "$BR" | jq -r '.conditions.ref_name.include | join(",")')' rather than refs/heads/main"
         printf '%s' "$BR" | jq -e '.enforcement == "active"' > /dev/null && pass "branch ruleset '$(printf '%s' "$BR" | jq -r .name)' is active" || fail "branch ruleset is not active"
         printf '%s' "$BR" | jq -e '[.rules[] | select(.type == "pull_request")] | length > 0' > /dev/null && pass "ruleset requires a pull request" || fail "ruleset has no pull_request rule"
         printf '%s' "$BR" | jq -e '[.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | select(.context == "ci / CI passed")] | length > 0' > /dev/null && pass "ruleset requires 'ci / CI passed'" || fail "ruleset does not require the status check 'ci / CI passed'"
@@ -153,6 +165,7 @@ if [ -n "$REPO" ]; then
         TG="$(gh api "repos/${REPO}/rulesets/${TG_ID}")"
         printf '%s' "$TG" | jq -e '.conditions.ref_name.include | index("refs/tags/v*")' > /dev/null && pass "tag ruleset covers refs/tags/v*" || fail "tag ruleset does not include refs/tags/v*"
         printf '%s' "$TG" | jq -e '[.rules[].type] | index("deletion") and index("update")' > /dev/null && pass "tag ruleset blocks deletion and update" || fail "tag ruleset must block deletion and update"
+        printf '%s' "$TG" | jq -e '[.rules[].type] | index("creation")' > /dev/null && pass "tag ruleset restricts creation to the release App" || warn "tag ruleset leaves creation open: anyone with write access can cut a release tag"
       else
         fail "no tag ruleset on ${REPO}"
       fi

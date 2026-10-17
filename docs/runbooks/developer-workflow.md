@@ -2,7 +2,8 @@
 
 ## Purpose
 
-Change a module and get it released. The daily cheat sheet.
+Change a module and get it onto `dev`, where it waits for the next promotion to `main`
+([promote-to-main.md](promote-to-main.md)). The daily cheat sheet.
 
 ## Prerequisites
 
@@ -12,7 +13,7 @@ per clone to run the same checks on every commit.
 ## Steps
 
 ```bash
-git switch main && git pull --ff-only
+git switch dev && git pull --ff-only
 git switch -c feat/custom-kms-key          # feat/ fix/ docs/ chore/ refactor/ test/ ci/
 
 # ... edit main.tf, variables.tf, outputs.tf, tests/, examples/ ...
@@ -27,16 +28,18 @@ git add main.tf variables.tf README.md tests/inputs.tftest.hcl   # name the file
 git status --short
 git commit -m "feat: add support for a customer managed KMS key"
 git push -u origin feat/custom-kms-key
-gh pr create --fill                          # title = Conventional Commit; body in prose
+gh pr create --base dev --fill               # title = Conventional Commit; body in prose
 ```
 
 Then:
 
 1. CI runs. Fix anything red and push again.
 2. A code owner reviews. Resolve every conversation.
-3. Squash merge. The pull-request title becomes the commit on `main`.
+3. Squash merge. The pull-request title becomes the commit on `dev`.
 4. The branch is deleted automatically.
-5. release-please opens or updates the release pull request. Nothing else to do.
+5. Your change waits on `dev`. A maintainer promotes `dev` to `main`
+   ([promote-to-main.md](promote-to-main.md)); release-please then opens the release
+   pull request. Nothing else to do.
 
 Title rules that matter: `feat:` for new capability, `fix:` for a bug, `feat!:` or
 `fix!:` for a breaking change (then also add a `BREAKING CHANGE: ...` footer as the
@@ -46,14 +49,15 @@ never release on their own.
 ## Validation
 
 - The pull request shows `ci / CI passed` green.
-- After merge, `gh pr list --label "autorelease: pending"` shows the release pull
-  request with your change in its changelog.
+- After merge, `git fetch origin && git log --oneline origin/main..origin/dev` lists
+  your change among those waiting for promotion.
 
 ## Rollback
 
-Before merge: push more commits or close the pull request. After merge: open a pull
-request titled `revert: <original title>` from `git revert <sha>`; it releases as a
-patch.
+Before merge: push more commits or close the pull request. After merge into `dev`:
+open a pull request into `dev` titled `revert: <original title>` from `git revert <sha>`
+before the next promotion, and nothing ever ships. After promotion and release: the
+same revert, promoted, releases as a patch.
 
 ## Troubleshooting
 

@@ -110,26 +110,50 @@ Deliberately absent:
 - `.github/release-please/`. release-please reads its two files from the repository
   root.
 
-## 3. Trunk-based development
+## 3. Branching: feature → dev → main
 
 ```text
-main  <──  short-lived branch  ──>  pull request  ──>  CI passes  ──>  review  ──>  squash merge  ──>  branch deleted
+short-lived branch ──> pull request ──> CI passes ──> review ──> squash merge into dev ──> branch deleted
+dev ──> promotion pull request (scripts/promote.sh) ──> CI passes ──> human approval ──> squash merge into main
+main ──> release-please release pull request ──> human merges it ──> tag vX.Y.Z + GitHub Release
+main ──> merged back into dev by the release workflow, so dev always contains main
 ```
 
-1. Branch from `main`.
-2. Make one small change.
-3. Run the local checks.
-4. Push.
-5. Open a pull request with a Conventional Commit title.
-6. CI passes.
-7. One code owner approves.
-8. Squash merge.
-9. The branch is deleted automatically.
+| Branch | Role | What merges into it | How |
+| --- | --- | --- | --- |
+| `feat/*`, `fix/*`, `docs/*`, `chore/*`, `refactor/*`, `test/*`, `ci/*` | One change. Lives for hours or days, then is deleted | Nothing | — |
+| `dev` | Integration: everything that passed CI and review and is not yet released. Pull requests from people and from AI agents land here and nowhere else | A short-lived branch, by pull request: `ci / CI passed`, one approval, conversations resolved | Squash. The pull-request title is the Conventional Commit |
+| `main` | Release: every commit is a promotion, a release commit or a hotfix. Tags and GitHub Releases are cut from it and from nothing else | `dev`, by the promotion pull request `scripts/promote.sh` opens: `ci / CI passed` on an up-to-date branch, one human approval, code owner review | Squash, with the generated description (section 13) |
+
+1. Branch from `dev`.
+2. Make one small change. Run the local checks. Push.
+3. Open a pull request into `dev` with a Conventional Commit title.
+4. CI passes. One reviewer approves. Resolve every conversation. Squash merge; the
+   branch is deleted automatically.
+5. When `dev` holds what should ship, a maintainer runs `scripts/promote.sh`. It
+   refuses to run while `dev` is behind `main`, then opens `chore(promote): dev to
+   main` whose description lists every change.
+6. A human reviews the promotion (the diff is everything since the last promotion) and
+   squash merges it.
+7. release-please opens or updates the release pull request on `main`. A human merges
+   it. The tag and the GitHub Release appear within a minute.
+8. The release workflow merges `main` back into `dev`.
 
 Branch names: `feat/add-logging`, `fix/iam-policy`, `docs/update-example`,
-`chore/provider-update`. A branch lives for hours or days, not weeks. There is no
-`develop`, no `release/*` and no environment branch. `main` is always releasable
-because every commit on it passed CI and review.
+`chore/provider-update`. There is no `release/*` and no environment branch. A hotfix
+that cannot wait for `dev` is a pull request from a short-lived branch straight into
+`main`: approved by a human, released by release-please and merged back into `dev` by
+the same sync as any other push to `main`. It is the exception, and an agent never
+opens one.
+
+The integration branch costs one more pull request per release and a sync that has to
+stay healthy. `scripts/promote.sh` makes the sync a precondition rather than a memory
+exercise, and the release workflow performs it.
+
+The model applies to module repositories and to the root configurations that consume
+them. `terraform-module-standards` and `terraform-aws-module-template` release nothing
+and are consumed at `@main` or by copy, so they keep a single `main` and take pull
+requests into it directly.
 
 ## 4. Conventional Commits
 
@@ -190,7 +214,7 @@ plan they did not expect, it is major.
 ## 6. Releases with release-please
 
 ```text
-PR merged to main
+promotion pull request (or a hotfix) squash merged into main
       │
       ▼
 release-please reads the Conventional Commits since the last tag
@@ -249,6 +273,23 @@ Facts the configuration relies on, checked against release-please's source:
   with `GITHUB_TOKEN` never triggers the CI workflow, so the release PR could never
   pass the required status check. The App needs Contents, Pull requests and Issues
   read/write, and is installed once per organisation.
+- `terraform-release.yml` passes `target-branch: main` to release-please-action
+  explicitly. Left out, the action uses the repository's default branch; `main` is the
+  release branch whatever the default branch is. The job also runs only when the
+  caller was triggered on `refs/heads/main`.
+- release-please walks `main`'s history in commit-date order and stops at the first
+  commit whose SHA is the last release's. A merge commit from `dev` would leave every
+  `dev` commit dated before that release unread, silently
+  (googleapis/release-please#1533, #2883). The promotion is therefore a squash whose
+  description lists every change (section 13).
+- The release job runs in a concurrency group per repository and is never cancelled,
+  so two pushes to `main` cannot both try to create the same tag. A failed run is
+  rerun from the Actions tab or with `gh workflow run release-please.yml --ref main`;
+  release-please is idempotent (labels `autorelease: pending` → `autorelease: tagged`).
+- After every push to `main`, the `sync dev with main` job of the same workflow merges
+  `main` into `dev` as the release App. The merge adds nothing `dev` has not already
+  reviewed: the promotion squash commit and the release commit. If it conflicts, the
+  job fails and names the fix (open a pull request from `main` into `dev`).
 
 The release pull request can be edited before merging: its description becomes the
 changelog entry and the release notes. Use that to add migration notes for a major
@@ -383,7 +424,8 @@ input in a minor release before removing it in a major one, once module floors r
 | Pinned actions | Every `uses:` names a full commit SHA with the version as a comment. Dependabot keeps them current |
 | OIDC, no long-lived AWS keys | Module CI needs no AWS access at all. Where a consumer or an optional integration test does, it assumes a role through GitHub's OIDC provider (`aws-actions/configure-aws-credentials` with `role-to-assume` and `id-token: write`). No AWS access key is ever a repository secret |
 | No secrets in Terraform | Inputs that carry secrets are `sensitive = true`; values arrive from Secrets Manager or `TF_VAR_*`, never from committed files. `.gitignore` excludes `*.tfvars`, state and plan files |
-| Protected `main` and tags | Section 12 |
+| Protected `dev`, `main` and tags | Section 12 |
+| Promotion is human | A maintainer opens the `dev → main` pull request (`scripts/promote.sh`) and a different human approves it. Agents hold no admin role and no bypass, and open pull requests into `dev` only |
 | Required CI | The ruleset requires `ci / CI passed` |
 | Release identity | A GitHub App with Contents, Pull requests and Issues read/write, installed on module repositories only. Its private key is an organisation secret, or a repository secret where the plan does not allow organisation secrets on private repositories |
 | Read access for consumers' CI | A second GitHub App with Contents read-only, installed on module repositories, minted per job with `actions/create-github-app-token`. Never a token in a `source` URL |
@@ -407,17 +449,30 @@ the rule when the team is known.
 
 ## 12. Repository rulesets
 
-Two rulesets, identical in every module repository, imported from
-[`rulesets/`](../rulesets/) by the bootstrap script.
+Three rulesets, identical in every module repository, imported from
+[`rulesets/`](../rulesets/) by the bootstrap script. `main.json` targets
+`refs/heads/main` by name, not the default branch, so changing the default branch
+never moves the release rules.
 
 | Ruleset | Rule | Setting |
 | --- | --- | --- |
-| `main` | Require a pull request | 1 approving review, stale reviews dismissed on push, code owner review required, conversation resolution required, squash is the only merge method |
+| `dev` | Require a pull request | 1 approving review, stale reviews dismissed on push, approval of the most recent push, conversation resolution required, squash is the only merge method |
+| `dev` | Required status checks | `ci / CI passed`; the branch need not be up to date (an integration branch moves too fast for that) |
+| `dev` | Block deletion and force-push | On |
+| `dev` | Bypass | The release App, always: it pushes the `main → dev` sync. Repository admins, pull-request mode (see below) |
+| `main` | Require a pull request | 1 approving review, stale reviews dismissed on push, code owner review required, approval of the most recent push, conversation resolution required, squash is the only merge method |
 | `main` | Required status checks | `ci / CI passed`, branch must be up to date |
 | `main` | Block deletion and force-push | On |
 | `main` | Linear history | On (squash merges make it so) |
 | `main` | Bypass | Repository admins, pull-request mode only. Nobody bypasses on a direct push |
-| `release tags` (`refs/tags/v*`) | Block deletion, update and force-push | On. Tag creation stays open: release-please creates tags |
+| `release tags` (`refs/tags/v*`) | Block creation, deletion, update and force-push | On. The release App is the only bypass actor, so release-please is the only thing that can create a release tag |
+
+The bootstrap script replaces the placeholder `actor_id: 0` with the release App's ID.
+The repository-admin bypass in pull-request mode exists for an organisation with one
+maintainer, who could otherwise never merge their own pull request: a bypass merge is
+recorded as such in the audit log. Remove it from both files as soon as a second
+maintainer exists. AI agents are never repository admins, so the bypass is not open to
+them.
 
 Plan constraints, as GitHub documents them:
 
@@ -425,11 +480,12 @@ Plan constraints, as GitHub documents them:
   repositories on every plan, and on private repositories only on GitHub Pro, Team or
   Enterprise. On GitHub Free the API refuses a ruleset on a private repository
   ("Upgrade to GitHub Pro or make this repository public to enable this feature"),
-  so nothing protects `main` or the tags. Decide visibility, or the plan, before the
-  first module repository is created
+  so nothing protects `dev`, `main` or the tags, and the model in section 3 is
+  procedural until that changes. Decide visibility, or the plan, before the first
+  module repository is created
   ([create-repository.md](runbooks/create-repository.md), step 0).
 - Organisation-level rulesets need GitHub Team or Enterprise. When the organisation
-  is on such a plan, import the same two files once at organisation level, targeting
+  is on such a plan, import the same three files once at organisation level, targeting
   repositories named `terraform-aws-*`, and stop importing them per repository. The
   `rulesets` recipes repository already has the tooling (`make deploy`).
 - Tag name patterns need Enterprise. Tag names are enforced by release-please
@@ -437,8 +493,8 @@ Plan constraints, as GitHub documents them:
 
 ## 13. Merge strategy
 
-**Squash merge only.** The repository settings make the squash commit's subject the
-pull-request title and its body the pull-request description.
+**Into `dev`: squash merge only.** The repository settings make the squash commit's
+subject the pull-request title and its body the pull-request description.
 
 ```text
 PR title:  feat: add support for a customer managed KMS key
@@ -458,14 +514,57 @@ PR body:   Adds kms_key_arn ...
   a Conventional Commit (`fix: ...`) as an extra changelog entry. Write the body in
   prose; do not paste commit lists into it.
 
-Merge commits and rebase merges are disabled: a merge commit hides the Conventional
-Commit, and a rebase lets unreviewed local messages reach `main`.
+**Into `main`: squash merge of the promotion pull request, with the generated
+description.** `scripts/promote.sh` writes the description from the squash commits on
+`dev` that `main` lacks: one block per change, oldest first, holding the subject
+(`feat(aurora): add serverless v2 scaling (#10)`) and, directly under it, that commit's
+`BREAKING CHANGE:` and `Release-As:` footers if any. Every header starts at column 0,
+blocks are separated by blank lines, nothing is bulleted. release-please parses each
+block as its own change (its README: "What if my PR contains multiple fixes or
+features?"), so one squash commit on `main` releases exactly what `dev` accumulated,
+with the right bump, while the title `chore(promote): dev to main` adds nothing to the
+changelog. The reviewer reads the same list.
+
+```text
+chore(promote): dev to main (#42)
+
+Promotes 3 change(s) from dev to main. Squash merge only. ...
+
+feat(aurora): add serverless v2 scaling (#10)
+
+fix(vpc): correct the private NAT route (#11)
+BREAKING CHANGE: route table ids are renamed
+
+feat: add the sns-alert-topic module (#1)
+Release-As: 1.0.0
+```
+
+Why not a merge commit: release-please reads `main` in commit-date order and stops at
+the first commit equal to the last release. A merge commit keeps `dev`'s commits with
+their original dates, so any of them older than the last release commit is skipped
+without a warning (googleapis/release-please#1533 and #2883; the maintainers: "this is
+one of the main reasons we avoid using merge commits"). Why not rebase: it rewrites
+SHAs, drops signatures, and release-please can no longer match the commits to their
+pull requests.
+
+**Into `dev` from `main`: the sync job pushes a merge commit** as the release App. Its
+content is what `dev` already reviewed plus the release commit. Nothing else ever
+reaches `dev` by merge commit.
+
+If a promotion was merged with a wrong description, edit the merged pull request's
+description and add a `BEGIN_COMMIT_OVERRIDE … END_COMMIT_OVERRIDE` block listing the
+changes in the same shape; release-please uses it on its next run. This works for
+squash merges only.
+
+Merge commits and rebase merges are disabled in the repository settings for pull
+requests. The sync job's merge commit arrives by `git push`, which those settings do
+not govern.
 
 ## 14. Dependency updates
 
 | Dependency | How it is updated | Gate before merge |
 | --- | --- | --- |
-| GitHub Actions (SHA pins) | Dependabot, weekly, grouped, `ci:` prefix, with a seven-day cooldown so a release is a week old before it is proposed, in every module repository and in `terraform-module-standards` | The full CI run on the Dependabot pull request |
+| GitHub Actions (SHA pins) | Dependabot, weekly, grouped, `ci:` prefix, with a seven-day cooldown so a release is a week old before it is proposed, in every module repository and in `terraform-module-standards`. Version updates target `dev` (`target-branch: dev`); Dependabot security updates always target the default branch, `main`, and are merged back into `dev` by the sync | The full CI run on the Dependabot pull request |
 | Terraform CLI | CI tests `latest` every week; `terraform-min-version` is raised deliberately in a `feat!:` pull request | CI on both matrix entries |
 | AWS provider | No upper bound; CI tests the latest weekly. A new minimum is a `feat!:` pull request | CI, including Checkov and tests |
 | TFLint and its AWS ruleset | Versions live in the shared workflow and in the template's `.tflint.hcl`. Bump centrally; the compliance check reports modules whose `.tflint.hcl` drifted | Standards repository CI, then each module's next run |
@@ -511,8 +610,9 @@ Create repository (from template)  ──>  bootstrap script applies settings + 
 | GitHub template repository (`terraform-aws-module-template`) | Every file in section 2, with `__OWNER__`, `__TEAM__`, `__MODULE__` placeholders | **Yes.** One click or one `gh repo create --template` |
 | Reusable workflows (`terraform-ci.yml`, `terraform-release.yml`) | All CI logic, tool versions, action pins | **Yes.** Module repositories keep two thin callers. A change to the standard is one pull request, reviewed once |
 | Bootstrap script (`scripts/new-module-repo.sh`) | Settings, topics, team access, rulesets, secrets, placeholder substitution | **Yes.** Idempotent; `--configure-only` upgrades an existing repository |
-| Compliance script (`scripts/check-module-repo.sh`) | Proves a repository meets sections 2, 6, 9, 11, 12 and 13 | **Yes.** Local and remote checks |
-| Organisation rulesets | The two rulesets, applied once | **When the plan allows** (Team or Enterprise). Until then the script imports them per repository |
+| Compliance script (`scripts/check-module-repo.sh`) | Proves a repository meets sections 2, 3, 6, 9, 11, 12 and 13 | **Yes.** Local and remote checks |
+| Promotion script (`scripts/promote.sh`) | Opens the `dev → main` pull request with the description release-please needs; refuses while `dev` is behind `main` | **Yes.** The one step in the model that a person performs by hand |
+| Organisation rulesets | The three rulesets, applied once | **When the plan allows** (Team or Enterprise). Until then the script imports them per repository |
 | Composite actions | Wrapping individual steps | **No.** The reusable workflows already remove the duplication |
 | Central CODEOWNERS | One file for all repositories | **Not possible.** GitHub has no such mechanism; the standard team name is the substitute |
 
@@ -535,7 +635,7 @@ versions.tf (minimums only)   examples/basic/  examples/complete/   tests/*.tfte
 docs/{tutorials,how-to,reference,explanation}/
 ci.yml and release-please.yml calling the shared workflows
 release-please-config.json (terraform-module)   .release-please-manifest.json
-squash-only merges   the two rulesets   semantic version tags
+branches dev and main   squash-only merges   the three rulesets   semantic version tags
 ```
 
 `scripts/check-module-repo.sh PATH --repo OWNER/NAME` checks all of it and exits
