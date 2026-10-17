@@ -46,6 +46,24 @@ on:
 permissions: {}
 
 jobs:
+  # main accepts pull requests from dev (the promotion) and from release-please
+  # only. Every other pull request into main fails this job, and with it
+  # "ci / CI passed", which the main ruleset requires.
+  source:
+    name: Source branch
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: main accepts dev and release-please only
+        env:
+          HEAD: ${{ github.head_ref }}
+        run: |
+          case "$HEAD" in
+            dev|release-please--branches--main) echo "ok: pull request into main from $HEAD" ;;
+            *) echo "::error title=wrong source branch::Pull requests into main come from dev (scripts/promote.sh) or from release-please, never from $HEAD. Retarget it: gh pr edit --base dev"; exit 1 ;;
+          esac
+
   pr-title:
     name: PR title
     if: github.event_name == 'pull_request'
@@ -217,7 +235,7 @@ jobs:
   ci-ok:
     name: CI passed
     if: always()
-    needs: [pr-title, test, lint, docs, security, provider-floor]
+    needs: [source, pr-title, test, lint, docs, security, provider-floor]
     runs-on: ubuntu-latest
     steps:
       - name: Require every job to pass
@@ -225,10 +243,11 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          # pr-title is skipped on push and scheduled runs, provider-floor when
-          # no floor is configured; nothing else may be.
+          # pr-title is skipped on push and scheduled runs, source unless the
+          # pull request targets main, provider-floor when no floor is
+          # configured; nothing else may be.
           echo "$RESULTS" | jq -e '
             [ to_entries[]
               | select(.value.result != "success")
-              | select(((.key == "pr-title" or .key == "provider-floor") and .value.result == "skipped") | not)
+              | select(((.key == "pr-title" or .key == "provider-floor" or .key == "source") and .value.result == "skipped") | not)
             ] | length == 0' > /dev/null

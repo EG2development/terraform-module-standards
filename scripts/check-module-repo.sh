@@ -134,6 +134,9 @@ if [ -n "$REPO" ]; then
       [ "$(j .is_template)" = "false" ] && pass "not a template repository" || warn "repository is marked as a template"
       printf '%s' "$INFO" | jq -e '.topics | index("terraform-module")' > /dev/null && pass "topic terraform-module set" || warn "topic terraform-module missing"
       echo "info  visibility: $(j .visibility); default branch: $(j .default_branch)"
+      if [ "$(j .default_branch)" = "dev" ]; then pass "dev is the default branch"
+      elif $TEMPLATE; then pass "default branch main (the template repository is trunk-based)"
+      else fail "default branch is $(j .default_branch); module repositories default to dev (main is the release branch)"; fi
       SS="$(j '.security_and_analysis.secret_scanning.status // "unavailable"')"
       [ "$SS" = "enabled" ] && pass "secret scanning enabled" || warn "secret scanning: ${SS}"
       if gh api "repos/${REPO}/vulnerability-alerts" > /dev/null 2>&1; then pass "Dependabot alerts enabled"; else fail "Dependabot alerts disabled"; fi
@@ -171,8 +174,10 @@ if [ -n "$REPO" ]; then
       else
         fail "no tag ruleset on ${REPO}"
       fi
-      EFFECTIVE="$(gh api "repos/${REPO}/rules/branches/$(j .default_branch)" --jq 'length' 2> /dev/null || echo 0)"
-      [ "${EFFECTIVE}" -gt 0 ] && pass "GitHub reports ${EFFECTIVE} rule(s) in effect on $(j .default_branch)" || warn "GitHub reports no rules in effect on $(j .default_branch); on GitHub Free, private repositories cannot have rulesets"
+      for b in main dev; do
+        EFFECTIVE="$(gh api "repos/${REPO}/rules/branches/${b}" --jq 'length' 2> /dev/null || echo 0)"
+        [ "${EFFECTIVE}" -gt 0 ] && pass "GitHub reports ${EFFECTIVE} rule(s) in effect on ${b}" || warn "GitHub reports no rules in effect on ${b}; on GitHub Free, private repositories cannot have rulesets"
+      done
       CO_ERR="$(gh api "repos/${REPO}/codeowners/errors" --jq '.errors | length' 2> /dev/null || echo "?")"
       [ "$CO_ERR" = "0" ] && pass "CODEOWNERS has no errors" || warn "CODEOWNERS errors: ${CO_ERR} (gh api repos/${REPO}/codeowners/errors)"
       SECRETS="$(gh secret list --repo "$REPO" 2> /dev/null | awk '{print $1}' || true)"

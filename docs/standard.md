@@ -140,11 +140,18 @@ main ──> merged back into dev by the release workflow, so dev always contain
 8. The release workflow merges `main` back into `dev`.
 
 Branch names: `feat/add-logging`, `fix/iam-policy`, `docs/update-example`,
-`chore/provider-update`. There is no `release/*` and no environment branch. A hotfix
-that cannot wait for `dev` is a pull request from a short-lived branch straight into
-`main`: approved by a human, released by release-please and merged back into `dev` by
-the same sync as any other push to `main`. It is the exception, and an agent never
-opens one.
+`chore/provider-update`. There is no `release/*`, no environment branch, and no hotfix
+path around `dev`: `main` accepts exactly two sources, the promotion from `dev` and
+release-please's own branch. The shared CI's `Source branch` job fails any other pull
+request into `main` (and with it `ci / CI passed`), and the release workflow's `guard`
+job records any push to `main` that was not such a merge. A fix that cannot wait goes
+into `dev` and is promoted on its own.
+
+`dev` is the default branch of every module repository: new pull requests, Dependabot
+(security updates included), coding agents, clones and scheduled workflows land on it
+by default. `main` is the release branch by name, not by setting: release-please
+targets it explicitly and the rulesets name `refs/heads/main`, so nothing follows the
+default-branch setting.
 
 The integration branch costs one more pull request per release and a sync that has to
 stay healthy. `scripts/promote.sh` makes the sync a precondition rather than a memory
@@ -286,6 +293,9 @@ Facts the configuration relies on, checked against release-please's source:
   so two pushes to `main` cannot both try to create the same tag. A failed run is
   rerun from the Actions tab or with `gh workflow run release-please.yml --ref main`;
   release-please is idempotent (labels `autorelease: pending` → `autorelease: tagged`).
+- The `guard` job of the same workflow checks that every push to `main` is the squash
+  of a pull request from `dev` or from release-please, and fails the run otherwise. It
+  records; it never blocks the release or the sync.
 - After every push to `main`, the `sync dev with main` job of the same workflow merges
   `main` into `dev` as the release App. The merge adds nothing `dev` has not already
   reviewed: the promotion squash commit and the release commit. If it conflicts, the
@@ -451,8 +461,8 @@ the rule when the team is known.
 
 Three rulesets, identical in every module repository, imported from
 [`rulesets/`](../rulesets/) by the bootstrap script. `main.json` targets
-`refs/heads/main` by name, not the default branch, so changing the default branch
-never moves the release rules.
+`refs/heads/main` by name, not the default branch (which is `dev`), so the release
+rules never follow the default-branch setting.
 
 | Ruleset | Rule | Setting |
 | --- | --- | --- |
@@ -462,6 +472,7 @@ never moves the release rules.
 | `dev` | Bypass | The release App, always: it pushes the `main → dev` sync. Organisation owners, pull-request mode (see below) |
 | `main` | Require a pull request | 1 approving review, stale reviews dismissed on push, code owner review required, approval of the most recent push, conversation resolution required, squash is the only merge method |
 | `main` | Required status checks | `ci / CI passed`, branch must be up to date |
+| `main` | Source of pull requests | `dev` (the promotion) and `release-please--branches--main` only. A ruleset cannot name an allowed source branch, so the `Source branch` job inside `ci / CI passed` enforces it |
 | `main` | Block deletion and force-push | On |
 | `main` | Linear history | On (squash merges make it so) |
 | `main` | Bypass | Organisation owners, pull-request mode only. Nobody bypasses on a direct push |
@@ -567,7 +578,7 @@ not govern.
 
 | Dependency | How it is updated | Gate before merge |
 | --- | --- | --- |
-| GitHub Actions (SHA pins) | Dependabot, weekly, grouped, `ci:` prefix, with a seven-day cooldown so a release is a week old before it is proposed, in every module repository and in `terraform-module-standards`. Version updates target `dev` (`target-branch: dev`); Dependabot security updates always target the default branch, `main`, and are merged back into `dev` by the sync | The full CI run on the Dependabot pull request |
+| GitHub Actions (SHA pins) | Dependabot, weekly, grouped, `ci:` prefix, with a seven-day cooldown so a release is a week old before it is proposed, in every module repository and in `terraform-module-standards`. Version updates target `dev` (`target-branch: dev`), and security updates land there too because `dev` is the default branch | The full CI run on the Dependabot pull request |
 | Terraform CLI | CI tests `latest` every week; `terraform-min-version` is raised deliberately in a `feat!:` pull request | CI on both matrix entries |
 | AWS provider | No upper bound; CI tests the latest weekly. A new minimum is a `feat!:` pull request | CI, including Checkov and tests |
 | TFLint and its AWS ruleset | Versions live in the shared workflow and in the template's `.tflint.hcl`. Bump centrally; the compliance check reports modules whose `.tflint.hcl` drifted | Standards repository CI, then each module's next run |
