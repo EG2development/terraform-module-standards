@@ -5,11 +5,11 @@ needed to apply it without thinking about it twice:
 
 | What | Where |
 | --- | --- |
-| The standard: naming, layout, trunk-based development, Conventional Commits, versioning, release-please, consumption, CI, versions, security, CODEOWNERS, rulesets, merge strategy, dependency updates, README, template | [`docs/standard.md`](docs/standard.md) |
+| The standard: naming, layout, branching (feature → dev → main), Conventional Commits, versioning, release-please, consumption, CI, versions, security, CODEOWNERS, rulesets, merge strategy, dependency updates, README, template | [`docs/standard.md`](docs/standard.md) |
 | Runbooks: create a repository, daily workflow, release, breaking change, migrate an existing module, upgrade a consumer, troubleshooting | [`docs/runbooks/`](docs/runbooks/README.md) |
 | Reusable CI workflow every module calls | [`.github/workflows/terraform-ci.yml`](.github/workflows/terraform-ci.yml) |
 | Reusable release workflow (release-please) every module calls | [`.github/workflows/terraform-release.yml`](.github/workflows/terraform-release.yml) |
-| Rulesets for `main` and for release tags | [`rulesets/`](rulesets/) |
+| Rulesets for `dev`, `main` and release tags | [`rulesets/`](rulesets/) |
 | Create and configure a module repository in one command | [`scripts/new-module-repo.sh`](scripts/new-module-repo.sh) |
 | Check a module repository against the standard | [`scripts/check-module-repo.sh`](scripts/check-module-repo.sh) |
 
@@ -33,8 +33,10 @@ Full procedure: [create-repository.md](docs/runbooks/create-repository.md).
 ## How a change becomes a release
 
 ```text
-branch → pull request (Conventional Commit title) → ci / CI passed → code owner review → squash merge
-       → release-please updates "chore(main): release X.Y.Z" → merge it → tag vX.Y.Z + GitHub Release
+branch → pull request into dev (Conventional Commit title) → ci / CI passed → review → squash merge
+dev    → scripts/promote.sh opens "chore(promote): dev to main" → ci / CI passed → human approval → squash merge
+main   → release-please updates "chore(main): release X.Y.Z" → merge it → tag vX.Y.Z + GitHub Release
+main   → merged back into dev by the release workflow
 ```
 
 ## Changing the standard

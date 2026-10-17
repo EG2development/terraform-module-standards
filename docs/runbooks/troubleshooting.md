@@ -45,6 +45,10 @@ Find your symptom. Each row names where the fix lives.
 | Breaking change released as minor | `!` missing from the title and no `BREAKING CHANGE:` footer, or the repository merges with "pull request title" only | Set the squash default to title + description (`new-module-repo.sh --configure-only`); add `Release-As: N.0.0` in a follow-up |
 | Extra, unexpected changelog entries | Lines in the pull-request description that look like `fix: ...` are parsed as commits | Write descriptions in prose; edit the release pull-request description to remove them |
 | Tag created but no GitHub Release | Workflow interrupted | Re-run the release workflow; it is idempotent |
+| A change merged into `dev` is missing from the release pull request, or the bump is too small | The promotion was merged with a merge commit (release-please reads `main` in commit-date order and stops at the last release), or a header line in its description was bulleted or indented | Edit the merged promotion's description: `BEGIN_COMMIT_OVERRIDE` … `END_COMMIT_OVERRIDE` with one header per line at column 0; rerun the release workflow. Squash merge promotions, always |
+| `promote.sh`: `dev does not contain main` | The `sync dev with main` job has not run since the last push to `main`, or failed | `gh workflow run release-please.yml --ref main --repo ${OWNER}/${REPO}`; check the run |
+| `sync dev with main` job: `main does not merge cleanly into dev` | A pull request into `dev` changed a line release-please also rewrites (the README usage pin, `CHANGELOG.md`) | Open a pull request from `main` into `dev`, resolve the conflict, have an admin merge it with a merge commit; keep release-please-owned lines untouched on `dev` |
+| Two release workflow runs for one push, or a run queued behind another | Expected: the job's concurrency group serialises runs per repository and never cancels one | Nothing; the queued run finds nothing new to do |
 
 ### Repository settings
 

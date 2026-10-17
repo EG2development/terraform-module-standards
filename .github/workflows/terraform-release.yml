@@ -1,9 +1,11 @@
 # Reusable release workflow for Terraform module repositories.
 #
 # Called from each module repository's .github/workflows/release-please.yml on
-# every push to main. release-please reads the Conventional Commits since the
-# last release, keeps one release pull request up to date, and when that PR is
-# merged creates the tag vX.Y.Z and the GitHub Release.
+# every push to main (and on workflow_dispatch, to rerun). release-please reads
+# the Conventional Commits since the last release, keeps one release pull
+# request up to date, and when that PR is merged creates the tag vX.Y.Z and the
+# GitHub Release. A second job then merges main back into dev, so the next
+# promotion pull request carries only new work.
 #
 # It authenticates as a GitHub App, not as GITHUB_TOKEN, because pull requests
 # opened with GITHUB_TOKEN never trigger the CI workflow, so the release PR
@@ -26,7 +28,16 @@ permissions: {}
 jobs:
   release-please:
     name: release-please
+    # Releases come from main only. The caller triggers on push to main; this
+    # guard holds even if a caller's trigger is wrong.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # One release run at a time per repository, never cancelled: two overlapping
+    # runs could both try to create the same tag.
+    concurrency:
+      group: release-please-${{ github.repository }}
+      cancel-in-progress: false
     permissions:
       contents: read
     steps:
@@ -47,6 +58,9 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # Explicit, not detected: main is the release branch whatever the
+          # repository's default branch is.
+          target-branch: main
 
       - name: Summary
         env:
@@ -61,3 +75,61 @@ jobs:
           else
             echo "No releasable commits since the last release." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  sync-dev:
+    name: sync dev with main
+    # Every push to main (a promotion, a release commit, a hotfix) is merged
+    # back into dev, so dev always contains main and the next promotion pull
+    # request lists only new work. The merge is a no-op in content: dev already
+    # holds the promoted changes; it gains the squash commit and the release
+    # commit. Runs as the release App, which is a bypass actor on dev.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: sync-dev-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+
+      - name: Merge main into dev
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          if ! git ls-remote --exit-code --heads origin dev > /dev/null; then
+            echo "No dev branch: nothing to sync." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git fetch -q origin dev
+          if git merge-base --is-ancestor origin/main origin/dev; then
+            echo "dev already contains main." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          BOT_ID="$(gh api "users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git switch -q -c sync origin/dev
+          if ! git merge --no-edit -m "chore(sync): merge main into dev" origin/main; then
+            echo "::error title=dev sync failed::main does not merge cleanly into dev. Open a pull request from main into dev, resolve the conflict, merge it with a merge commit (docs/runbooks/promote-to-main.md, Troubleshooting)."
+            exit 1
+          fi
+          git push -q origin HEAD:dev
+          echo "Merged main ($(git rev-parse --short origin/main)) into dev." >> "$GITHUB_STEP_SUMMARY"

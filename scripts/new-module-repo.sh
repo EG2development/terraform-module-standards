@@ -19,6 +19,8 @@
 #   --dest DIR               Where to clone (default: ./terraform-aws-NAME)
 #   --release-app-client-id ID     Set the RELEASE_APP_CLIENT_ID repository secret
 #   --release-app-key-file PATH    Set the RELEASE_APP_PRIVATE_KEY repository secret from a file
+#   --release-app-slug SLUG  GitHub App that release-please runs as (default: terraform-bot-release);
+#                            it becomes the only actor allowed to create release tags and to push to dev
 #   --configure-only         Skip creation; apply settings and rulesets to an existing repository
 #   --dry-run                Print every command instead of running it
 #   -h, --help               Show this help
@@ -27,7 +29,7 @@
 set -euo pipefail
 
 OWNER=""; NAME=""; TEAM=""; DESCRIPTION=""; VISIBILITY="private"; TEMPLATE=""; DEST=""
-APP_CLIENT_ID=""; APP_KEY_FILE=""; CONFIGURE_ONLY=false; DRY_RUN=false
+APP_CLIENT_ID=""; APP_KEY_FILE=""; RELEASE_APP_SLUG="terraform-bot-release"; CONFIGURE_ONLY=false; DRY_RUN=false
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RULESETS_DIR="${HERE}/../rulesets"
 
@@ -48,6 +50,7 @@ while [ $# -gt 0 ]; do
     --dest) DEST="$2"; shift 2 ;;
     --release-app-client-id) APP_CLIENT_ID="$2"; shift 2 ;;
     --release-app-key-file) APP_KEY_FILE="$2"; shift 2 ;;
+    --release-app-slug) RELEASE_APP_SLUG="$2"; shift 2 ;;
     --configure-only) CONFIGURE_ONLY=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -142,6 +145,19 @@ else
   fi
 fi
 
+log "Integration branch dev (branch from it; promote it to main with scripts/promote.sh)"
+MAIN_SHA=""
+$DRY_RUN || MAIN_SHA="$(gh api "repos/${FULL}/git/ref/heads/main" --jq .object.sha 2> /dev/null || true)"
+if $DRY_RUN; then
+  echo "+ gh api -X POST repos/${FULL}/git/refs -f ref=refs/heads/dev -f sha=<main sha>  (unless dev exists)"
+elif [ -z "$MAIN_SHA" ]; then
+  warn "main has no commits yet; create dev after the first push: gh api -X POST repos/${FULL}/git/refs -f ref=refs/heads/dev -f sha=<main sha>"
+elif gh api "repos/${FULL}/git/ref/heads/dev" > /dev/null 2>&1; then
+  echo "dev exists"
+else
+  gh api -X POST "repos/${FULL}/git/refs" -f ref=refs/heads/dev -f sha="$MAIN_SHA" > /dev/null && echo "created dev at ${MAIN_SHA:0:7}"
+fi
+
 log "Repository settings: squash merges only, PR title + body as the commit, branch clean-up"
 SETTINGS="$(jq -n '{
   allow_squash_merge: true,
@@ -174,24 +190,44 @@ fi
 log "Topics"
 run gh repo edit "$FULL" --add-topic terraform --add-topic terraform-module --add-topic aws
 
+log "Immutable releases (tag and assets locked once published)"
+run gh api -X PUT "repos/${FULL}/immutable-releases" > /dev/null || warn "could not enable immutable releases"
+
 log "Rulesets"
+# The release App is the only actor allowed to create release tags and to push
+# the main -> dev sync. Its App ID replaces the placeholder actor_id 0 in the
+# ruleset files. Without it the tag "creation" rule would lock release-please
+# out, so that rule and the placeholder are dropped, with a warning.
+APP_ID=""
+if [ "$OWNER_TYPE" = "Organization" ] && ! $DRY_RUN; then
+  APP_ID="$(gh api "orgs/${OWNER}/installations" --jq ".installations[] | select(.app_slug == \"${RELEASE_APP_SLUG}\") | .app_id" 2> /dev/null | head -1 || true)"
+fi
+[ -n "$APP_ID" ] || $DRY_RUN || warn "GitHub App '${RELEASE_APP_SLUG}' is not installed on ${OWNER}; release tags stay creatable by anyone with write access (see --release-app-slug)"
+with_app_id() {
+  if [ -n "$APP_ID" ]; then
+    jq --argjson id "$APP_ID" '(.bypass_actors[] | select(.actor_type == "Integration" and .actor_id == 0) | .actor_id) = $id' "$1"
+  else
+    jq 'del(.bypass_actors[] | select(.actor_type == "Integration" and .actor_id == 0)) | if .target == "tag" then del(.rules[] | select(.type == "creation")) else . end' "$1"
+  fi
+}
 apply_ruleset() {
-  local file="$1" name id=""
+  local file="$1" name id="" body
   name="$(jq -r .name "$file")"
+  body="$(with_app_id "$file")"
   if ! $DRY_RUN; then
     id="$(gh api "repos/${FULL}/rulesets" --jq ".[] | select(.name == \"${name}\") | .id" 2> /dev/null || true)"
     [[ "$id" =~ ^[0-9]+$ ]] || id=""
   fi
   local verb; verb="$($DRY_RUN && echo would || echo did)"
   if [ -n "$id" ]; then
-    run gh api -X PUT "repos/${FULL}/rulesets/${id}" --input "$file" > /dev/null \
+    printf '%s' "$body" | run gh api -X PUT "repos/${FULL}/rulesets/${id}" --input - > /dev/null \
       && echo "${verb} update ruleset '${name}' (${id})"
   else
-    run gh api -X POST "repos/${FULL}/rulesets" --input "$file" > /dev/null \
+    printf '%s' "$body" | run gh api -X POST "repos/${FULL}/rulesets" --input - > /dev/null \
       && echo "${verb} create ruleset '${name}'"
   fi
 }
-for f in "${RULESETS_DIR}/main.json" "${RULESETS_DIR}/release-tags.json"; do
+for f in "${RULESETS_DIR}/dev.json" "${RULESETS_DIR}/main.json" "${RULESETS_DIR}/release-tags.json"; do
   apply_ruleset "$f" || warn "ruleset $(basename "$f") was not applied; check the plan and your permissions"
 done
 

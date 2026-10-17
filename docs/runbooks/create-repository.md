@@ -126,14 +126,15 @@ cd ~/src   # wherever you keep clones
 ```
 
 The script creates the repository from the template, grants the team maintain access,
-replaces the placeholders, pushes that one commit, sets squash-only merging, enables
-Dependabot and secret scanning, adds topics and imports the two rulesets. Re-running
-it is safe.
+replaces the placeholders, pushes that one commit, creates the `dev` branch from it,
+sets squash-only merging, enables Dependabot, secret scanning and immutable releases,
+adds topics and imports the three rulesets. Re-running it is safe.
 
 ### 2. Check the empty repository
 
 ```bash
 gh repo view "${OWNER}/terraform-aws-${NAME}" --json name,visibility,isTemplate,repositoryTopics
+gh api "repos/${OWNER}/terraform-aws-${NAME}/branches/dev" --jq .name                      # expect dev
 gh api "repos/${OWNER}/terraform-aws-${NAME}/rulesets" --jq '.[] | "\(.target)\t\(.name)\t\(.enforcement)"'
 gh api "repos/${OWNER}/terraform-aws-${NAME}/codeowners/errors" --jq '.errors | length'   # expect 0
 ```
@@ -142,7 +143,7 @@ gh api "repos/${OWNER}/terraform-aws-${NAME}/codeowners/errors" --jq '.errors | 
 
 ```bash
 cd "terraform-aws-${NAME}"
-git switch -c feat/initial-module
+git switch dev && git switch -c feat/initial-module
 ```
 
 Replace the placeholder content of `main.tf`, `variables.tf`, `outputs.tf`,
@@ -168,7 +169,7 @@ git add main.tf variables.tf outputs.tf versions.tf README.md examples tests
 git status --short
 git commit -m "feat: add the ${NAME} module"
 git push -u origin feat/initial-module
-gh pr create --title "feat: add the ${NAME} module" --body "$(cat <<'BODY'
+gh pr create --base dev --title "feat: add the ${NAME} module" --body "$(cat <<'BODY'
 ## What changed
 
 First version of the module.
@@ -183,16 +184,24 @@ BODY
 ```
 
 The last line of the description is what makes the first release `1.0.0` instead of
-`0.1.0`. Keep it as the last line.
+`0.1.0`. Keep it as the last line; the promotion script carries it to `main`.
 
-### 5. Merge
+### 5. Merge into dev, then promote
 
 Wait for `ci / CI passed` and one approval from `@${OWNER}/${TEAM}`, then squash merge
-from the pull request page or with `gh pr merge --squash`.
+from the pull request page or with `gh pr merge --squash`. Then open the promotion:
+
+```bash
+"${STANDARDS}/scripts/promote.sh" --dry-run     # the description must end with "Release-As: 1.0.0"
+"${STANDARDS}/scripts/promote.sh"
+```
+
+A human approves `chore(promote): dev to main` and squash merges it
+([promote-to-main.md](promote-to-main.md)).
 
 ### 6. Release 1.0.0
 
-Within a minute of the merge, release-please opens `chore(main): release 1.0.0`.
+Within a minute of the promotion, release-please opens `chore(main): release 1.0.0`.
 
 ```bash
 gh pr list --label "autorelease: pending"
