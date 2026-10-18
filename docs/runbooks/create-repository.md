@@ -11,7 +11,7 @@ it is the same for the first repository and the tenth.
 - `gh` signed in with the `repo`, `read:org` and `admin:org` scopes
   (`gh auth refresh -s admin:org`), and permission to create repositories in the
   organisation.
-- `jq`, `perl`, `git`, Terraform 1.9 or later, `tflint`, `terraform-docs`.
+- `jq`, `perl`, `git`, Terraform 1.16 or later, `tflint`, `terraform-docs`.
 - A clone of `terraform-module-standards`.
 
 ```bash
