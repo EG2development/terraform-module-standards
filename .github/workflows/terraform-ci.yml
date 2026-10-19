@@ -229,7 +229,7 @@ jobs:
 
       # Consumers calling this module from a Git source do not scan its code,
       # so the module repository is where its resources are scanned.
-      - uses: bridgecrewio/checkov-action@c13aafd679d3814a25067d10fcaf98c4f7594931 # v12.3131.0
+      - uses: bridgecrewio/checkov-action@29be5868bfa968f099ae80169f61f42887494b8f # v12.3133.0
         with:
           directory: .
           framework: terraform
