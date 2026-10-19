@@ -6,7 +6,7 @@
 #     ci:
 #       uses: OWNER/terraform-module-standards/.github/workflows/terraform-ci.yml@main
 #       with:
-#         terraform-min-version: "1.9.8"
+#         terraform-min-version: "1.16.6"
 #         aws-provider-min-version: "6.0.0"
 #
 # The only status check a ruleset needs to require is "ci / CI passed": the
@@ -26,7 +26,7 @@ on:
           versions.tf allows. Raise it when required_version is raised.
         type: string
         required: false
-        default: "1.9.8"
+        default: "1.16.6"
       aws-provider-min-version:
         description: >-
           The exact hashicorp/aws version matching the minimum in versions.tf
