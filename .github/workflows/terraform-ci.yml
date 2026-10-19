@@ -48,10 +48,15 @@ permissions: {}
 jobs:
   # main accepts pull requests from dev (the promotion) and from release-please
   # only. Every other pull request into main fails this job, and with it
-  # "ci / CI passed", which the main ruleset requires.
+  # "ci / CI passed", which the main ruleset requires. The template repository
+  # releases nothing and takes pull requests into main directly (standard,
+  # section 3), so the job skips there; repositories created from the template
+  # are not templates and keep it.
   source:
     name: Source branch
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      !github.event.repository.is_template
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
