@@ -77,8 +77,9 @@ Then make it general:
 - Replace project enumerations (`environment` must be `dev|stage|prod`) with plain
   strings or drop them.
 - Add `validation` blocks, `nullable = false`, descriptions.
-- Set `versions.tf` to the real minimums (`>= 1.9.0`, `aws >= 6.0` unless the code
-  needs more, with a comment saying what).
+- Set `versions.tf` to the family's Terraform floor (`>= 1.16.0`) and the real
+  provider minimum (`aws >= 6.0` unless the code needs more, with a comment saying
+  what).
 - **Keep every resource type and name** (`aws_ecr_repository.main` stays `main`)
   where the resource stays in the module. Where a resource gains `count` or leaves
   the module, the consumer writes the `moved` block in its own root configuration —

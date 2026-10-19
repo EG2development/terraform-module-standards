@@ -371,9 +371,9 @@ passed as the `checkov-skip-checks` input and justified in the module's README.
 ```hcl
 terraform {
   # Minimum versions only. The root configuration that calls the module sets
-  # upper bounds. 1.9 is the first version whose variable validation can refer
-  # to other variables.
-  required_version = ">= 1.9.0"
+  # upper bounds. 1.16 is the Terraform floor shared by every module, so a
+  # caller needs one Terraform minimum for all of them.
+  required_version = ">= 1.16.0"
 
   required_providers {
     aws = {
@@ -384,15 +384,18 @@ terraform {
 }
 ```
 
-- A module declares the **lowest** version it actually works with and no upper bound.
-  New modules start at Terraform `>= 1.9.0` and `hashicorp/aws >= 6.0`; a module goes
-  higher only when it uses something newer, with a comment saying what (for example
+- Every module requires Terraform `>= 1.16.0`. The Terraform floor is one value for
+  the whole family, so a caller needs one Terraform minimum for all of the modules it
+  uses; it is raised for every module at once.
+- A module declares the **lowest** provider version it actually works with and no
+  upper bound. New modules start at `hashicorp/aws >= 6.0`; a module goes higher only
+  when it uses something newer, with a comment saying what (for example
   `terraform-aws-vpc` needs aws 6.24 for regional NAT gateways). An existing module
-  keeps its floor until it needs more (`terraform-aws-ecr-repository` works from
-  Terraform 1.7 and aws 5.0). Raising either minimum is a major release.
+  keeps its provider floor until it needs more (`terraform-aws-ecr-repository` works
+  from aws 5.0). Raising either minimum is a major release.
 - CI tests the newest patch of the oldest allowed minor (the `terraform-min-version`
-  input, `1.9.8` for `>= 1.9.0`) and `latest`; with `aws-provider-min-version` set it
-  also tests the provider floor.
+  input, `1.16.6` for `>= 1.16.0`) and `latest`; with `aws-provider-min-version` set
+  it also tests the provider floor.
 - Supporting providers (`random`, `null`, `archive`) follow the same rule, and a
   module declares only providers it uses.
 - Examples carry their own `versions.tf` with the same minimums.
@@ -412,7 +415,7 @@ a module as upper bounds.
 | Component | Current | Used where |
 | --- | --- | --- |
 | Terraform | 1.16.6 | CI `latest`; consumers' roots |
-| Terraform floor for new modules | 1.9 (CI tests 1.9.8) | `required_version` |
+| Terraform floor for every module | 1.16 (CI tests 1.16.6) | `required_version` |
 | `hashicorp/aws` | 6.69.1 | CI `latest`; floor `>= 6.0` unless a feature needs more |
 | `hashicorp/random`, `null`, `archive` | 3.9.1, 3.3.2, 2.8.1 | only where used |
 | TFLint / `tflint-ruleset-aws` | 0.64.0 / 0.49.0 | shared CI, `.tflint.hcl` |
@@ -425,9 +428,9 @@ Terraform features the modules use, and the version that introduced each:
 defaults (1.3), `terraform test` (1.6), `mock_provider` and `removed` (1.7),
 cross-variable validation (1.9). Newer features that matter to consumers rather than
 modules: `import` blocks inside modules (1.16) and `lifecycle { destroy = false }`
-(1.16); `deprecated` on variables and outputs (1.15) is the right way to retire an
-input in a minor release before removing it in a major one, once module floors reach
-1.15.
+(1.16). `deprecated` on variables and outputs (1.15) is the right way to retire an
+input in a minor release before removing it in a major one; with the 1.16 floor every
+module can use it.
 
 ## 10. Security
 

@@ -29,7 +29,7 @@ Find your symptom. Each row names where the fix lives.
 | `Lint`: `Failed to install a plugin` or rate limit | TFLint could not download the AWS ruleset | The shared workflow passes `GITHUB_TOKEN`; locally set `GITHUB_TOKEN=$(gh auth token)` |
 | `Security scan` fails on a check you accept | Checkov finding | Add the ID to `checkov-skip-checks` in `ci.yml` **and** justify it in the README under Security scanning |
 | Every job fails within seconds with no steps | Actions billing or quota for the owner, not the code | Run the checks locally; fix billing; re-run |
-| `terraform test`: `Unsupported block type mock_provider` | Terraform older than 1.7 | Upgrade Terraform |
+| `terraform init`: `Unsupported Terraform Core version` | Terraform older than 1.16, the floor of every module | Upgrade Terraform to 1.16 or later |
 | `Invalid count argument` | `count` depends on a value unknown at plan time | Drive it from a `bool` input |
 
 ### release-please

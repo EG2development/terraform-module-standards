@@ -7,7 +7,7 @@ Change a module and get it onto `dev`, where it waits for the next promotion to 
 
 ## Prerequisites
 
-Terraform 1.9+, `tflint`, `terraform-docs`, `gh`. Optional: `pre-commit install` once
+Terraform 1.16+, `tflint`, `terraform-docs`, `gh`. Optional: `pre-commit install` once
 per clone to run the same checks on every commit.
 
 ## Steps
