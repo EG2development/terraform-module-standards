@@ -6,7 +6,7 @@
 #     ci:
 #       uses: OWNER/terraform-module-standards/.github/workflows/terraform-ci.yml@main
 #       with:
-#         terraform-min-version: "1.9.8"
+#         terraform-min-version: "1.16.6"
 #         aws-provider-min-version: "6.0.0"
 #
 # The only status check a ruleset needs to require is "ci / CI passed": the
@@ -26,7 +26,7 @@ on:
           versions.tf allows. Raise it when required_version is raised.
         type: string
         required: false
-        default: "1.9.8"
+        default: "1.16.6"
       aws-provider-min-version:
         description: >-
           The exact hashicorp/aws version matching the minimum in versions.tf
@@ -48,10 +48,15 @@ permissions: {}
 jobs:
   # main accepts pull requests from dev (the promotion) and from release-please
   # only. Every other pull request into main fails this job, and with it
-  # "ci / CI passed", which the main ruleset requires.
+  # "ci / CI passed", which the main ruleset requires. The template repository
+  # releases nothing and takes pull requests into main directly (standard,
+  # section 3), so the job skips there; repositories created from the template
+  # are not templates and keep it.
   source:
     name: Source branch
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      !github.event.repository.is_template
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
