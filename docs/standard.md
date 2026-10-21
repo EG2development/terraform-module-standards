@@ -1,8 +1,8 @@
 # Terraform module repository standard
 
 One Git repository per Terraform module. Trunk-based development, Conventional Commits,
-release-please, semantic version tags, shared CI. This page is the standard. The
-[runbooks](runbooks/README.md) are the procedures.
+release-please, semantic version tags, and CI that lives in each repository. This page
+is the standard. The [runbooks](runbooks/README.md) are the procedures.
 
 Values used in examples:
 
@@ -33,8 +33,8 @@ Two repositories support the modules:
 
 | Repository | Holds |
 | --- | --- |
-| `terraform-module-standards` | This standard, the runbooks, the reusable workflows, the rulesets, the scripts |
-| `terraform-aws-module-template` | The GitHub template every new module repository is created from |
+| `terraform-module-standards` | This standard, the runbooks, the rulesets, and the scripts that create and check a module repository. Nothing a module calls at run time |
+| `terraform-aws-module-template` | The GitHub template every new module repository is created from, including the workflows and the Copilot review instructions every module carries |
 
 ## 2. Repository layout
 
@@ -44,15 +44,22 @@ terraform-aws-<capability>/
 │   ├── CODEOWNERS
 │   ├── PULL_REQUEST_TEMPLATE.md
 │   ├── dependabot.yml
+│   ├── instructions/
+│   │   └── adr-review.instructions.md  # what Copilot code review checks (section 20)
+│   ├── skills/
+│   │   └── code-review/SKILL.md        # how an agent reviews a change (section 20)
 │   └── workflows/
-│       ├── ci.yml                 # calls terraform-ci.yml from terraform-module-standards
-│       └── release-please.yml     # calls terraform-release.yml from terraform-module-standards
+│       ├── release-please.yml     # release-please with GITHUB_TOKEN (section 6)
+│       └── workflow.yml           # the one CI workflow (section 8)
+├── configs/                       # checkov.yml and the other linters' configuration
 ├── docs/
 │   ├── tutorials/                 # one page: first deployment
 │   ├── how-to/                    # one to three pages: common tasks
 │   ├── reference/                 # one page: resources, names, IAM granted, permissions needed;
 │   │                              #   architecture.drawio and its export, architecture.png
-│   └── explanation/               # design-decisions.md, ending with "Left out on purpose"
+│   ├── explanation/               # design-decisions.md, ending with "Left out on purpose"
+│   └── decisions/                 # README.md (index and rules), adr-template.md, one MADR
+│                                  #   record per decision: NNNN-title-with-dashes.md
 ├── examples/
 │   ├── basic/                     # main.tf  variables.tf  outputs.tf  versions.tf
 │   └── complete/                  # a realistic production-style call
@@ -62,7 +69,9 @@ terraform-aws-<capability>/
 ├── .pre-commit-config.yaml
 ├── .release-please-manifest.json
 ├── .terraform-docs.yml
+├── .terraform-version             # the Terraform tfenv selects here (section 9)
 ├── .tflint.hcl
+├── AGENTS.md                      # guidance for coding agents
 ├── CHANGELOG.md                   # written by release-please
 ├── CONTRIBUTING.md
 ├── LICENSE
@@ -81,13 +90,17 @@ terraform-aws-<capability>/
 | `examples/basic/` | The minimum call, as a complete root configuration with `source = "../.."`. CI validates and plans it |
 | `examples/complete/` | A production-style call that uses the important optional inputs and composes the outputs with other resources. Never more complicated than the module |
 | `tests/*.tftest.hcl` | `terraform test` with `mock_provider`: no credentials, nothing created. Pins secure defaults, generated names, every validation, and both examples |
-| `docs/` | Four short Diátaxis pages (below). The README stays a front page |
-| `.github/workflows/ci.yml` | Twenty lines. Calls the shared CI workflow |
-| `.github/workflows/release-please.yml` | Fourteen lines. Calls the shared release workflow |
+| `docs/` | Four short Diátaxis pages and the decision records (below). The README stays a front page |
+| `.github/workflows/release-please.yml` | release-please with `GITHUB_TOKEN` on every push to `main` (section 6): one job, with contents and pull-requests write |
+| `.github/workflows/workflow.yml` | The one CI workflow (section 8): terraform fmt, Checkov, TFLint, TruffleHog, Docs, PR title and Test jobs, every action pinned to a commit SHA. Identical in every module |
+| `configs/` | Configuration for Static Analysis. `checkov.yml` skips a shared list plus the module's own AWS checks, each justified in the README |
+| `AGENTS.md`, `.github/skills/code-review/SKILL.md` | Guidance for coding agents and for agent code review. Identical in every module; copied from the template |
+| `.github/instructions/adr-review.instructions.md` | What Copilot code review checks about decision records (section 20). Identical in every module; copied from the template |
 | `release-please-config.json`, `.release-please-manifest.json` | Release type and the last released version. Module-specific state, so they stay local |
 | `.terraform-docs.yml`, `.tflint.hcl` | Tool configuration CI and pre-commit both read. Copied from the template; the compliance check flags drift |
+| `.terraform-version` | The Terraform release tfenv selects in the repository, so a clone uses it without `tfenv use`: the newest patch of the floor's minor, the same release CI's oldest-Terraform job tests |
 | `CHANGELOG.md` | Owned by release-please. Humans edit it only through the release pull request |
-| `CONTRIBUTING.md` | Ten lines: branch, commit title, checks, link to the runbooks |
+| `CONTRIBUTING.md` | Five steps: branch, change, checks, pull-request title, merge; links to `docs/how-to/`, the pull request template and Static Analysis |
 | `SECURITY.md` | How to report a vulnerability privately (GitHub private vulnerability reporting) and which versions get fixes |
 | `LICENSE` | Apache-2.0, the Terraform ecosystem's usual licence |
 
@@ -99,6 +112,15 @@ The four `docs/` pages, each in one mode only:
 | `how-to/<task>.md` | "How do I …" | One task per page: enable an optional feature, change a risky setting safely, compose with other resources |
 | `reference/<page>.md` | "What exactly …" | Every resource and when it exists; every generated name and tag; exactly what IAM the module grants; what permissions the caller needs; minimum versions and why; the diagram (`architecture.drawio`, exported beside it as `architecture.png` so GitHub shows it) |
 | `explanation/design-decisions.md` | "Why …" | The secure defaults and the trade-offs behind them, ending with a "Left out on purpose" table |
+
+`docs/decisions/` holds the architecture decision records: one
+[MADR 4.0.0](https://adr.github.io/madr/) file per decision, numbered
+`NNNN-title-with-dashes.md`, never reused or renumbered. `README.md` is the index and
+the rules for writing, accepting and superseding a record; `adr-template.md` is the
+template, copied unchanged from `terraform-aws-module-template`.
+`explanation/design-decisions.md` describes the design as it stands; `decisions/` is
+the log of how it got there. A record that changes a documented default also updates
+that page.
 
 Deliberately absent:
 
@@ -116,14 +138,14 @@ Deliberately absent:
 short-lived branch ──> pull request ──> CI passes ──> review ──> squash merge into dev ──> branch deleted
 dev ──> promotion pull request (scripts/promote.sh) ──> CI passes ──> human approval ──> squash merge into main
 main ──> release-please release pull request ──> human merges it ──> tag vX.Y.Z + GitHub Release
-main ──> merged back into dev by the release workflow, so dev always contains main
+main ──> merged back into dev by a pull request after each release, so dev contains main
 ```
 
 | Branch | Role | What merges into it | How |
 | --- | --- | --- | --- |
 | `feat/*`, `fix/*`, `docs/*`, `chore/*`, `refactor/*`, `test/*`, `ci/*` | One change. Lives for hours or days, then is deleted | Nothing | — |
-| `dev` | Integration: everything that passed CI and review and is not yet released. Pull requests from people and from AI agents land here and nowhere else | A short-lived branch, by pull request: `ci / CI passed`, one approval, conversations resolved | Squash. The pull-request title is the Conventional Commit |
-| `main` | Release: every commit is a promotion, a release commit or a hotfix. Tags and GitHub Releases are cut from it and from nothing else | `dev`, by the promotion pull request `scripts/promote.sh` opens: `ci / CI passed` on an up-to-date branch, one human approval, code owner review | Squash, with the generated description (section 13) |
+| `dev` | Integration: everything that passed CI and review and is not yet released. Pull requests from people and from AI agents land here and nowhere else | A short-lived branch, by pull request: the `workflow.yml` checks, one approval, conversations resolved | Squash. The pull-request title is the Conventional Commit |
+| `main` | Release: every commit is a promotion, a release commit or a hotfix. Tags and GitHub Releases are cut from it and from nothing else | `dev`, by the promotion pull request `scripts/promote.sh` opens: the `workflow.yml` checks, one human approval, code owner review | Squash, with the generated description (section 13) |
 
 1. Branch from `dev`.
 2. Make one small change. Run the local checks. Push.
@@ -137,15 +159,16 @@ main ──> merged back into dev by the release workflow, so dev always contain
    squash merges it.
 7. release-please opens or updates the release pull request on `main`. A human merges
    it. The tag and the GitHub Release appear within a minute.
-8. The release workflow merges `main` back into `dev`.
+8. After each release, an admin opens a pull request from `main` into `dev`, allows
+   merge commits in the repository settings, merges it with a merge commit, and turns
+   merge commits off again (section 13).
 
 Branch names: `feat/add-logging`, `fix/iam-policy`, `docs/update-example`,
 `chore/provider-update`. There is no `release/*`, no environment branch, and no hotfix
 path around `dev`: `main` accepts exactly two sources, the promotion from `dev` and
-release-please's own branch. The shared CI's `Source branch` job fails any other pull
-request into `main` (and with it `ci / CI passed`), and the release workflow's `guard`
-job records any push to `main` that was not such a merge. A fix that cannot wait goes
-into `dev` and is promoted on its own.
+release-please's own branch. No check enforces this: reviewers confirm the source
+branch of every pull request into `main`. A fix that cannot wait goes into `dev` and is
+promoted on its own.
 
 `dev` is the default branch of every module repository: new pull requests, Dependabot
 (security updates included), coding agents, clones and scheduled workflows land on it
@@ -155,7 +178,7 @@ default-branch setting.
 
 The integration branch costs one more pull request per release and a sync that has to
 stay healthy. `scripts/promote.sh` makes the sync a precondition rather than a memory
-exercise, and the release workflow performs it.
+exercise; an admin performs it after each release (section 13).
 
 Diagram: [`docs/diagrams/release-flow.png`](diagrams/release-flow.png) (the flow, the
 promotion description, the version rules and the tokens) and
@@ -282,30 +305,27 @@ Facts the configuration relies on, checked against release-please's source:
   The first release is made `1.0.0` by ending the first pull request's description
   with the line `Release-As: 1.0.0` (procedure in [release.md](runbooks/release.md)).
 - The manifest starts empty. release-please writes the released version into it.
-- release-please runs as a GitHub App, not as `GITHUB_TOKEN`. A pull request opened
-  with `GITHUB_TOKEN` never triggers the CI workflow, so the release PR could never
-  pass the required status check. The App needs Contents, Pull requests and Issues
-  read/write, and is installed once per organisation.
-- `terraform-release.yml` passes `target-branch: main` to release-please-action
+- release-please runs as `GITHUB_TOKEN`, with `contents` and `pull-requests` write
+  granted to its job only. The repository must allow GitHub Actions to create pull
+  requests (the bootstrap script turns this on), and the tag ruleset leaves tag
+  creation open, because release-please creates the tag as GitHub Actions. A pull
+  request or tag made with `GITHUB_TOKEN` starts no workflows, so the release pull
+  request shows no checks; it changes only the changelog, the manifest and the README
+  version.
+- `release-please.yml` passes `target-branch: main` to release-please-action
   explicitly. Left out, the action uses the repository's default branch; `main` is the
-  release branch whatever the default branch is. The job also runs only when the
-  caller was triggered on `refs/heads/main`.
+  release branch whatever the default branch is.
 - release-please walks `main`'s history in commit-date order and stops at the first
   commit whose SHA is the last release's. A merge commit from `dev` would leave every
   `dev` commit dated before that release unread, silently
   (googleapis/release-please#1533, #2883). The promotion is therefore a squash whose
   description lists every change (section 13).
-- The release job runs in a concurrency group per repository and is never cancelled,
-  so two pushes to `main` cannot both try to create the same tag. A failed run is
-  rerun from the Actions tab or with `gh workflow run release-please.yml --ref main`;
-  release-please is idempotent (labels `autorelease: pending` → `autorelease: tagged`).
-- The `guard` job of the same workflow checks that every push to `main` is the squash
-  of a pull request from `dev` or from release-please, and fails the run otherwise. It
-  records; it never blocks the release or the sync.
-- After every push to `main`, the `sync dev with main` job of the same workflow merges
-  `main` into `dev` as the release App. The merge adds nothing `dev` has not already
-  reviewed: the promotion squash commit and the release commit. If it conflicts, the
-  job fails and names the fix (open a pull request from `main` into `dev`).
+- A failed release run is rerun from the Actions tab; release-please is idempotent
+  (labels `autorelease: pending` → `autorelease: tagged`).
+- After each release, `main` is merged back into `dev` through a pull request from
+  `main` into `dev`, which an admin merges with a merge commit. It adds nothing `dev`
+  has not already reviewed: the promotion squash commit and the release commit. Until
+  then `scripts/promote.sh` refuses to open the next promotion.
 
 The release pull request can be edited before merging: its description becomes the
 changelog entry and the release notes. Use that to add migration notes for a major
@@ -344,27 +364,31 @@ Registry alternatives, evaluated:
 
 ## 8. Pull-request CI
 
-Every module repository's `ci.yml` calls the shared workflow
-[`terraform-ci.yml`](../.github/workflows/terraform-ci.yml) on pull requests, pushes to
-`main` and once a week.
+Every module repository has one CI workflow, `.github/workflows/workflow.yml` (Static
+Analysis), the same file in every module, copied from the template. It runs on pull
+requests and needs no cloud credentials. Every job runs in the repository, with every
+action pinned to a full commit SHA, and each check runs once.
 
 | Job | Runs | Catches |
 | --- | --- | --- |
-| PR title | `amannn/action-semantic-pull-request` | A title release-please cannot read |
-| Test (oldest supported Terraform) and Test (latest) | `terraform fmt -check`, `init -backend=false`, `validate` for the module and every example, `terraform test` | Syntax, type and logic errors on both ends of the supported range |
-| Lint | `tflint --recursive` with the `terraform` and `aws` rulesets | Deprecated syntax, unused declarations, invalid AWS arguments |
+| terraform fmt | `terraform fmt -check -recursive` | Unformatted code |
+| Checkov | `checkov-action` with `configs/checkov.yml` | Insecure defaults and misconfigurations. The module repository is the only place the module's resources are scanned |
+| TFLint | `tflint --recursive` with the `terraform` and `aws` rulesets | Deprecated syntax, unused declarations, invalid AWS arguments |
+| TruffleHog | TruffleHog, verified results only | Committed secrets |
 | Docs | `terraform-docs` with `fail-on-diff`, then markdownlint on every Markdown file | Input and output tables that no longer match the code; broken Markdown in `docs/` |
-| Provider floor (when `aws-provider-min-version` is set) | `terraform init` and `terraform test` with the AWS provider pinned to the declared minimum | A module that claims to work with an older provider but uses something newer |
-| Security scan | Checkov, `framework: terraform` | Insecure defaults and misconfigurations. The module repository is the only place the module's resources are scanned |
-| CI passed | Aggregates the jobs above | The one status check the ruleset requires: `ci / CI passed` |
+| PR title | `amannn/action-semantic-pull-request` | A title release-please cannot read |
+| Test (oldest supported Terraform) and Test (latest) | `init -backend=false` and `validate` for the module and every example, `terraform test` | Syntax, type and logic errors on both ends of the supported range |
 
-The weekly scheduled run tests against the latest Terraform and the latest provider
-release, so a breaking upstream release is noticed before it blocks a real change.
+Every job reports on the pull request; the ruleset requires no status check. The
+workflow does not run on pushes to `main` or on a schedule, so a Terraform or provider
+release that breaks a module shows up on the next pull request.
 
 Not run, on purpose: Trivy and tfsec (the same misconfiguration checks as Checkov),
 `terraform plan` against a real account (the mocked tests need no credentials and
 create nothing), CodeQL (no application code). Module-specific Checkov exceptions are
-passed as the `checkov-skip-checks` input and justified in the module's README.
+added to `configs/checkov.yml` below the shared list and justified in the module's
+README. The compliance check fails a skip the README does not mention, a `ci.yml` beside
+`workflow.yml`, and a reusable workflow from another repository.
 
 ## 9. Terraform and provider versions
 
@@ -393,12 +417,16 @@ terraform {
   `terraform-aws-vpc` needs aws 6.24 for regional NAT gateways). An existing module
   keeps its provider floor until it needs more (`terraform-aws-ecr-repository` works
   from aws 5.0). Raising either minimum is a major release.
-- CI tests the newest patch of the oldest allowed minor (the `terraform-min-version`
-  input, `1.16.6` for `>= 1.16.0`) and `latest`; with `aws-provider-min-version` set
-  it also tests the provider floor.
+- CI tests the newest patch of the oldest allowed Terraform minor (the first
+  `matrix.terraform` entry in `workflow.yml`, `1.16.6` for `>= 1.16.0`) and `latest`,
+  both with the newest AWS provider. No job pins the provider to a module's minimum,
+  so CI does not catch a module that starts using something newer than it declares.
 - Supporting providers (`random`, `null`, `archive`) follow the same rule, and a
   module declares only providers it uses.
 - Examples carry their own `versions.tf` with the same minimums.
+- `.terraform-version` in the repository root holds the Terraform release tfenv selects
+  locally, `1.16.6`: the same release as the first `matrix.terraform` entry in `workflow.yml`.
+  Change both together; the compliance check reports a mismatch.
 
 **Lock files are not committed in module repositories.** `.terraform.lock.hcl`
 records the provider versions one `init` selected. A module declares a range, and CI
@@ -406,7 +434,7 @@ must test both ends of it; a committed lock file would pin every job to one vers
 and tell consumers nothing, because Terraform ignores a module's lock file. Consuming
 root configurations commit their lock file as usual.
 
-### Version baseline (checked 2026-10-16)
+### Version baseline (Terraform and providers checked 2026-10-21, the rest 2026-10-16)
 
 The current releases, from the HashiCorp registry, the Terraform checkpoint API and
 each project's GitHub releases. Recheck before raising a floor; never copy these into
@@ -414,14 +442,22 @@ a module as upper bounds.
 
 | Component | Current | Used where |
 | --- | --- | --- |
-| Terraform | 1.16.6 | CI `latest`; consumers' roots |
+| Terraform | 1.16.6, published 2026-10-14 (1.17.0 is a release candidate) | CI `latest`; consumers' roots |
 | Terraform floor for every module | 1.16 (CI tests 1.16.6) | `required_version` |
-| `hashicorp/aws` | 6.69.1 | CI `latest`; floor `>= 6.0` unless a feature needs more |
+| `hashicorp/aws` | 6.69.1, published 2026-10-15 | CI `latest`; floor `>= 6.0` unless a feature needs more |
 | `hashicorp/random`, `null`, `archive` | 3.9.1, 3.3.2, 2.8.1 | only where used |
-| TFLint / `tflint-ruleset-aws` | 0.64.0 / 0.49.0 | shared CI, `.tflint.hcl` |
-| Checkov | 3.3.26 (`checkov-action` v12.3131.0, as pinned; Dependabot proposes newer tags) | shared CI |
-| terraform-docs | 0.24.0 (release binary, checksum checked in the shared workflow) | shared CI, pre-commit |
-| release-please | 17.6.0, bundled in `release-please-action` v5.0.0, the newest Action release (release-please itself is at 17.11.2) | shared release workflow |
+| TFLint / `tflint-ruleset-aws` | 0.64.0 / 0.49.0 | `workflow.yml`, `.tflint.hcl` |
+| Checkov | 3.3.29 (`checkov-action` v12.3134.0) | `workflow.yml`, `configs/checkov.yml` |
+| TruffleHog | 3.99.2 (`trufflesecurity/trufflehog` action) | `workflow.yml` |
+| terraform-docs | 0.20.0 (`terraform-docs/gh-actions` v1.4.1) | `workflow.yml`, pre-commit |
+| release-please | 17.6.0, bundled in `release-please-action` v5.0.0, the newest Action release (release-please itself is at 17.11.2) | `release-please.yml` |
+
+The latest stable Terraform and `hashicorp/aws` releases:
+
+```bash
+curl -s https://checkpoint-api.hashicorp.com/v1/check/terraform | jq -r .current_version
+curl -s https://registry.terraform.io/v1/providers/hashicorp/aws | jq -r .version
+```
 
 Terraform features the modules use, and the version that introduced each:
 `moved` (1.1), preconditions and postconditions (1.2), `optional()` attributes with
@@ -439,15 +475,15 @@ module can use it.
 | Secret scanning and push protection | Repository setting, applied by the bootstrap script. Free on public repositories; private ones need GitHub Secret Protection |
 | Dependabot alerts and security updates | Repository settings, applied by the bootstrap script |
 | CODEOWNERS | Section 11; review required by the ruleset |
-| Least-privilege Actions | Every workflow declares `permissions`. The shared CI jobs hold `contents: read`; the release job holds nothing of its own and acts through the App token |
+| Least-privilege Actions | Every workflow declares `permissions`. The CI jobs hold `contents: read`; only the release job holds `contents` and `pull-requests` write |
 | Pinned actions | Every `uses:` names a full commit SHA with the version as a comment. Dependabot keeps them current |
 | OIDC, no long-lived AWS keys | Module CI needs no AWS access at all. Where a consumer or an optional integration test does, it assumes a role through GitHub's OIDC provider (`aws-actions/configure-aws-credentials` with `role-to-assume` and `id-token: write`). No AWS access key is ever a repository secret |
 | No secrets in Terraform | Inputs that carry secrets are `sensitive = true`; values arrive from Secrets Manager or `TF_VAR_*`, never from committed files. `.gitignore` excludes `*.tfvars`, state and plan files |
 | Protected `dev`, `main` and tags | Section 12 |
 | Promotion is human | A maintainer opens the `dev → main` pull request (`scripts/promote.sh`) and a different human approves it. Agents hold no admin role and no bypass, and open pull requests into `dev` only |
-| Required CI | The ruleset requires `ci / CI passed` |
-| Release identity | A GitHub App with Contents, Pull requests and Issues read/write, installed on module repositories only. Its private key is an organisation secret, or a repository secret where the plan does not allow organisation secrets on private repositories |
-| Read access for consumers' CI | Public module repositories need none: `terraform init` clones them anonymously. While a module repository is private, a second GitHub App with Contents read-only, installed on module repositories, minted per job with `actions/create-github-app-token`. Never a token in a `source` URL |
+| CI | Every pull request runs `workflow.yml`; the rulesets require no status check |
+| Release identity | `GITHUB_TOKEN`, with write access granted to the release job only. No release secret to store or rotate |
+| Read access for consumers' CI | Public module repositories need none: `terraform init` clones them anonymously. While a module repository is private, a GitHub App with Contents read-only, installed on module repositories, minted per job with `actions/create-github-app-token`. Never a token in a `source` URL |
 
 ## 11. CODEOWNERS
 
@@ -476,21 +512,16 @@ rules never follow the default-branch setting.
 | Ruleset | Rule | Setting |
 | --- | --- | --- |
 | `dev` | Require a pull request | 1 approving review, stale reviews dismissed on push, approval of the most recent push, conversation resolution required, squash is the only merge method |
-| `dev` | Required status checks | `ci / CI passed`; the branch need not be up to date (an integration branch moves too fast for that) |
 | `dev` | Block deletion and force-push | On |
-| `dev` | Bypass | The release App, always: it pushes the `main → dev` sync. Organisation owners, pull-request mode (see below) |
+| `dev` | Bypass | Organisation owners, pull-request mode (see below): they merge the `main → dev` pull request after a release with a merge commit |
 | `main` | Require a pull request | 1 approving review, stale reviews dismissed on push, code owner review required, approval of the most recent push, conversation resolution required, squash is the only merge method |
-| `main` | Required status checks | `ci / CI passed`, branch must be up to date |
-| `main` | Source of pull requests | `dev` (the promotion) and `release-please--branches--main` only. A ruleset cannot name an allowed source branch, so the `Source branch` job inside `ci / CI passed` enforces it |
+| `main` | Source of pull requests | `dev` (the promotion) and `release-please--branches--main` only, by convention: a ruleset cannot name an allowed source branch, and no check enforces it |
 | `main` | Block deletion and force-push | On |
 | `main` | Linear history | On (squash merges make it so) |
 | `main` | Bypass | Organisation owners, pull-request mode only. Nobody bypasses on a direct push |
-| `release tags` (`refs/tags/v*`) | Block creation, deletion, update and force-push | On. The release App is the only bypass actor, so release-please is the only thing that can create a release tag |
+| `release tags` (`refs/tags/v*`) | Block deletion, update and force-push | On. Creation stays open because release-please creates the tag with `GITHUB_TOKEN`; anyone with write access could create a `v*` tag, but nobody can move or delete one |
 
-The bootstrap script replaces the placeholder `actor_id: 0` with the release App's ID
-(the `Integration` actor; GitHub's documentation does not say which ID the type expects,
-so read the ruleset back after the first import and correct the file if needed). The
-organisation-owner bypass in pull-request mode exists for an organisation with one
+The organisation-owner bypass in pull-request mode exists for an organisation with one
 maintainer, who could otherwise never merge their own pull request: a bypass merge is
 recorded as such in the audit log. `OrganizationAdmin` is used rather than a repository
 role because GitHub documents it (the `actor_id` is ignored) and does not document the
@@ -539,27 +570,36 @@ PR body:   Adds kms_key_arn ...
 
 **Into `main`: squash merge of the promotion pull request, with the generated
 description.** `scripts/promote.sh` writes the description from the squash commits on
-`dev` that `main` lacks: one block per change, oldest first, holding the subject
-(`feat(aurora): add serverless v2 scaling (#10)`) and, directly under it, that commit's
-`BREAKING CHANGE:` and `Release-As:` footers if any. Every header starts at column 0,
-blocks are separated by blank lines, nothing is bulleted. release-please parses each
-block as its own change (its README: "What if my PR contains multiple fixes or
-features?"), so one squash commit on `main` releases exactly what `dev` accumulated,
-with the right bump, while the title `chore(promote): dev to main` adds nothing to the
-changelog. The reviewer reads the same list.
+`dev` that `main` lacks: one `BEGIN_NESTED_COMMIT` … `END_NESTED_COMMIT` block per
+change, oldest first, holding the subject (`feat(aurora): add serverless v2 scaling
+(#10)`) and that commit's `BREAKING CHANGE:` and `Release-As:` footers if any.
+release-please parses each block as its own commit, so one squash commit on `main`
+releases exactly what `dev` accumulated, with the right bump, while the title
+`chore(promote): dev to main` adds only a chore. Bare headers are not enough:
+release-please 17 splits a body only at headers without `!`, so a `feat!:` change and
+its breaking-change note would be attached to the promotion instead. The reviewer reads
+the same list.
 
 ```text
 chore(promote): dev to main (#42)
 
 Promotes 3 change(s) from dev to main. Squash merge only. ...
 
+BEGIN_NESTED_COMMIT
 feat(aurora): add serverless v2 scaling (#10)
+END_NESTED_COMMIT
 
-fix(vpc): correct the private NAT route (#11)
+BEGIN_NESTED_COMMIT
+fix(vpc)!: correct the private NAT route (#11)
+
 BREAKING CHANGE: route table ids are renamed
+END_NESTED_COMMIT
 
+BEGIN_NESTED_COMMIT
 feat: add the sns-alert-topic module (#1)
+
 Release-As: 1.0.0
+END_NESTED_COMMIT
 ```
 
 Why not a merge commit: release-please reads `main` in commit-date order and stops at
@@ -570,29 +610,29 @@ one of the main reasons we avoid using merge commits"). Why not rebase: it rewri
 SHAs, drops signatures, and release-please can no longer match the commits to their
 pull requests.
 
-**Into `dev` from `main`: the sync job pushes a merge commit** as the release App. Its
-content is what `dev` already reviewed plus the release commit. Nothing else ever
-reaches `dev` by merge commit.
+**Into `dev` from `main`: a merge commit, after each release.** An admin opens a pull
+request from `main` into `dev`, allows merge commits in the repository settings, merges
+it with a merge commit (the organisation-owner bypass lifts the ruleset's squash-only
+rule), and turns merge commits off again. Its content is what `dev` already reviewed
+plus the release commit. Nothing else ever reaches `dev` by merge commit.
 
 If a promotion was merged with a wrong description, edit the merged pull request's
-description and add a `BEGIN_COMMIT_OVERRIDE … END_COMMIT_OVERRIDE` block listing the
-changes in the same shape; release-please uses it on its next run. This works for
-squash merges only.
+description and add a `BEGIN_COMMIT_OVERRIDE … END_COMMIT_OVERRIDE` block holding the
+promotion's title line, a blank line, and the nested blocks; release-please uses it on
+its next run (rerun the latest release-please run). This works for squash merges only.
 
 Merge commits and rebase merges are disabled in the repository settings for pull
-requests. The sync job's merge commit arrives by `git push`, which those settings do
-not govern.
+requests, except for that one merge from `main` into `dev`.
 
 ## 14. Dependency updates
 
 | Dependency | How it is updated | Gate before merge |
 | --- | --- | --- |
-| GitHub Actions (SHA pins) | Dependabot, weekly, grouped, `ci:` prefix, with a seven-day cooldown so a release is a week old before it is proposed, in every module repository and in `terraform-module-standards`. Version updates target `dev` (`target-branch: dev`), and security updates land there too because `dev` is the default branch | The full CI run on the Dependabot pull request |
-| Terraform CLI | CI tests `latest` every week; `terraform-min-version` is raised deliberately in a `feat!:` pull request | CI on both matrix entries |
-| AWS provider | No upper bound; CI tests the latest weekly. A new minimum is a `feat!:` pull request | CI, including Checkov and tests |
-| TFLint and its AWS ruleset | Versions live in the shared workflow and in the template's `.tflint.hcl`. Bump centrally; the compliance check reports modules whose `.tflint.hcl` drifted | Standards repository CI, then each module's next run |
-| Checkov, setup actions | Pinned by SHA in the shared workflow; Dependabot bumps them there | Standards repository CI |
-| terraform-docs | Version and SHA-256 in the shared workflow's Docs job. Dependabot cannot see them: bump both by hand when a release appears | Standards repository CI |
+| GitHub Actions (SHA pins) | Dependabot, weekly, grouped, with a seven-day cooldown so a release is a week old before it is proposed, in every module repository and in `terraform-module-standards`. Version updates target `dev` (`target-branch: dev`), and security updates land there too because `dev` is the default branch | The `workflow.yml` checks on the Dependabot pull request |
+| Terraform CLI | The `latest` matrix entry tests each new release on every pull request; the oldest version is raised deliberately in a `feat!:` pull request | CI on both matrix entries |
+| AWS provider | No upper bound; every pull request tests the latest release. A new minimum is a `feat!:` pull request | CI, including Checkov and tests |
+| TFLint and its AWS ruleset | TFLint's version is in each module's `workflow.yml`, the ruleset's in `.tflint.hcl`. Bump them in the template, then in each module by pull request; the compliance check reports modules whose `.tflint.hcl` drifted | CI in each pull request |
+| Checkov, TruffleHog, terraform-docs, setup actions | Pinned by SHA in each module's `workflow.yml`; Dependabot bumps them in every repository | CI on the Dependabot pull request |
 | pre-commit hooks | `pre-commit autoupdate` in the template, monthly, copied to modules when they next change | Local run |
 
 Every update still goes through `fmt`, `validate`, `lint`, `security` and `tests`,
@@ -610,7 +650,8 @@ requirements and resources are generated by `terraform-docs` between
 3. Usage: one pinned Git source call, the `?ref=` line annotated
    `# x-release-please-version`.
 4. Examples: a table linking `examples/basic` and `examples/complete`.
-5. Documentation: a table linking the four `docs/` pages by the reader's need.
+5. Documentation: a table linking the four `docs/` pages and `docs/decisions/` by the
+   reader's need.
 6. The generated block: requirements, providers, resources, inputs, outputs.
 7. Defaults and security decisions: a table of each secure default, why, and the input
    that changes it.
@@ -622,7 +663,7 @@ requirements and resources are generated by `terraform-docs` between
 
 A README longer than about 300 lines is a sign the module does too much.
 
-## 16. Reusable template and central workflows
+## 16. Template and bootstrap
 
 ```text
 Create repository (from template)  ──>  bootstrap script applies settings + rulesets  ──>  add Terraform code  ──>  ready
@@ -631,22 +672,23 @@ Create repository (from template)  ──>  bootstrap script applies settings + 
 | Mechanism | Used for | Verdict |
 | --- | --- | --- |
 | GitHub template repository (`terraform-aws-module-template`) | Every file in section 2, with `__OWNER__`, `__TEAM__`, `__MODULE__` placeholders | **Yes.** One click or one `gh repo create --template` |
-| Reusable workflows (`terraform-ci.yml`, `terraform-release.yml`) | All CI logic, tool versions, action pins | **Yes.** Module repositories keep two thin callers. A change to the standard is one pull request, reviewed once |
-| Bootstrap script (`scripts/new-module-repo.sh`) | Settings, topics, team access, rulesets, secrets, placeholder substitution | **Yes.** Idempotent; `--configure-only` upgrades an existing repository |
+| Workflows copied from the template (`workflow.yml`, `release-please.yml`) | All CI and release logic, tool versions, action pins | **Yes.** Every module runs its own copy. A change is made in the template and rolled out to each module by pull request |
+| Bootstrap script (`scripts/new-module-repo.sh`) | Settings, topics, team access, rulesets, the Actions pull-request permission, placeholder substitution | **Yes.** Idempotent; `--configure-only` upgrades an existing repository |
 | Compliance script (`scripts/check-module-repo.sh`) | Proves a repository meets sections 2, 3, 6, 9, 11, 12 and 13 | **Yes.** Local and remote checks |
 | Promotion script (`scripts/promote.sh`) | Opens the `dev → main` pull request with the description release-please needs; refuses while `dev` is behind `main` | **Yes.** The one step in the model that a person performs by hand |
 | Organisation rulesets | The three rulesets, applied once | **When the plan allows** (Team or Enterprise). Until then the script imports them per repository |
-| Composite actions | Wrapping individual steps | **No.** The reusable workflows already remove the duplication |
+| Reusable workflows in a central repository | Sharing CI logic across repositories | **No.** Every module runs its own copy of the workflows and calls nothing in `terraform-module-standards` at run time |
 | Central CODEOWNERS | One file for all repositories | **Not possible.** GitHub has no such mechanism; the standard team name is the substitute |
 
-Module repositories call the shared workflows at `@main`. The standards repository
-is protected by the same ruleset, so a change to the workflows is reviewed once and
-reaches every module at once, which is the point of central standards. A repository
-that needs to hold back can pin a commit SHA of the standards repository instead.
+Nothing is called across repositories at run time. The cost is that a change to CI is
+one pull request per module, opened and reviewed like any other change; the benefit is
+that each repository can be understood, run and fixed on its own, and a change can be
+tried in one module before the rest.
 
-Central: workflow logic, action and tool versions, rulesets, runbooks. Local: the
-module code, `terraform-min-version`, Checkov exceptions, `.tflint.hcl`,
-`.terraform-docs.yml`, release-please state.
+Central: this standard, the rulesets, the runbooks, the scripts that create and check a
+repository. Local: everything a module runs: its workflows, tool versions, Checkov
+exceptions, `configs/`, `.tflint.hcl`, `.terraform-docs.yml`, release-please state, and
+the instructions Copilot code review follows.
 
 ## 17. Minimum standard and compliance
 
@@ -655,8 +697,9 @@ Every module repository has:
 ```text
 README.md  LICENSE  CONTRIBUTING.md  CHANGELOG.md  SECURITY.md  .github/CODEOWNERS
 versions.tf (minimums only)   examples/basic/  examples/complete/   tests/*.tftest.hcl
-docs/{tutorials,how-to,reference,explanation}/
-ci.yml and release-please.yml calling the shared workflows
+docs/{tutorials,how-to,reference,explanation}/   docs/decisions/{README.md,adr-template.md}
+.github/instructions/adr-review.instructions.md   .github/skills/code-review/SKILL.md   AGENTS.md
+workflow.yml (no ci.yml)  release-please.yml   configs/checkov.yml
 release-please-config.json (terraform-module)   .release-please-manifest.json
 branches dev and main   squash-only merges   the three rulesets   semantic version tags
 ```
@@ -697,3 +740,27 @@ by the caller (attach a policy to the role the module outputs); a module does no
 free-form policy documents for its own roles. Organisation-wide tags belong in the
 caller's provider `default_tags`; a module's `tags` input is for resource-specific
 tags.
+
+## 20. Decision records and Copilot code review
+
+`docs/decisions/` is the log of architecture decisions (section 2): one MADR 4.0.0
+record per decision, its README the policy and the index, `adr-template.md` the only
+template. Copilot code review checks every pull request it reviews against them by
+following `.github/instructions/adr-review.instructions.md`. That file applies to every
+path (`applyTo: "**"`) and only to code review (`excludeAgent: "cloud-agent"`). It is
+identical in every module and copied from the template. The code-review skill
+(`.github/skills/code-review/SKILL.md`) and `AGENTS.md` point to the same files. No
+workflow, script or custom agent is involved.
+
+Code review does not follow links, so the instruction file restates the policy's checks
+in short form. The policy wins where they differ, and a change to the policy changes the
+file in the same pull request.
+
+- Copilot comments and suggests; it never commits, approves or accepts a record. The
+  author writes the record and a human reviewer accepts it.
+- Copilot asks for a rationale the pull request does not state; it never supplies one.
+- A record that is not proposed changes only in status and date, and only to become
+  superseded.
+- Copilot's review is advice, never a required check.
+
+Turning the review on and checking it: [runbook](runbooks/adr-maintenance.md).

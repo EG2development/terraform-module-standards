@@ -61,16 +61,10 @@ git add .github .markdownlint-cli2.jsonc .gitignore .pre-commit-config.yaml LICE
 git status --short
 git commit -m "feat: terraform module repository standard"
 gh repo create "${OWNER}/terraform-module-standards" "--${VISIBILITY}" --source . --push \
-  --description "Standard, runbooks, reusable workflows and rulesets for Terraform module repositories"
+  --description "Standard, runbooks, rulesets and scripts for Terraform module repositories"
 gh repo edit "${OWNER}/terraform-module-standards" --enable-squash-merge --enable-merge-commit=false \
   --enable-rebase-merge=false --delete-branch-on-merge --allow-update-branch \
   --squash-merge-commit-message pr-title-description
-# Let other repositories call the reusable workflows (needed only when private).
-[ "${VISIBILITY}" = "private" ] && gh api -X PUT "repos/${OWNER}/terraform-module-standards/actions/permissions/access" -f access_level=organization
-# Let Dependabot in the module repositories resolve those workflows (needed only when
-# private; without it every module's Dependabot run fails with git_dependencies_not_reachable).
-[ "${VISIBILITY}" = "private" ] && jq -n --argjson id "$(gh api "repos/${OWNER}/terraform-module-standards" --jq .id)" \
-  '{repository_ids_to_add: [$id]}' | gh api -X PATCH "orgs/${OWNER}/dependabot/repository-access" --input -
 for f in rulesets/main.json rulesets/release-tags.json; do
   gh api -X POST "repos/${OWNER}/terraform-module-standards/rulesets" --input "$f" > /dev/null && echo "applied $f"
 done
@@ -83,8 +77,8 @@ cd ~/terraform-aws-module-template
 grep -rlI --exclude-dir=.git -e __OWNER__ -e __TEAM__ . | xargs perl -pi -e "s/__OWNER__/${OWNER}/g; s/__TEAM__/${TEAM}/g"
 terraform fmt -check -recursive && terraform init -backend=false > /dev/null && terraform validate && terraform test
 git init -b main 2> /dev/null || true
-git add .github .gitignore .pre-commit-config.yaml .release-please-manifest.json .terraform-docs.yml .tflint.hcl \
-  CHANGELOG.md CONTRIBUTING.md LICENSE README.md main.tf outputs.tf release-please-config.json variables.tf versions.tf examples tests
+git add .github .gitignore .markdownlint-cli2.jsonc .pre-commit-config.yaml .release-please-manifest.json .terraform-docs.yml .terraform-version .tflint.hcl \
+  AGENTS.md CHANGELOG.md CONTRIBUTING.md LICENSE README.md SECURITY.md main.tf outputs.tf release-please-config.json variables.tf versions.tf configs docs examples tests
 git status --short
 git commit -m "feat: terraform module repository template"
 gh repo create "${OWNER}/terraform-aws-module-template" "--${VISIBILITY}" --source . --push \
@@ -92,29 +86,22 @@ gh repo create "${OWNER}/terraform-aws-module-template" "--${VISIBILITY}" --sour
 gh repo edit "${OWNER}/terraform-aws-module-template" --template
 ```
 
-#### 0.5 Create the two GitHub Apps
+#### 0.5 Allow release-please and create the reader App
 
-In **Organisation settings → Developer settings → GitHub Apps → New GitHub App**:
+release-please runs as `GITHUB_TOKEN`, so the organisation must let GitHub Actions
+create pull requests: **Organisation settings → Actions → General → Workflow
+permissions → Allow GitHub Actions to create and approve pull requests**. The
+bootstrap script turns the same setting on for each repository.
+
+Consuming repositories need read access to private modules. In **Organisation
+settings → Developer settings → GitHub Apps → New GitHub App**:
 
 | App | Permissions | Installed on | Used by |
 | --- | --- | --- | --- |
-| `terraform-release-bot` | Repository: Contents read/write, Pull requests read/write, Issues read/write. Webhook: off | All `terraform-aws-*` repositories | `terraform-release.yml` to open release pull requests that trigger CI |
 | `terraform-modules-reader` | Repository: Contents read-only. Webhook: off | All `terraform-aws-*` repositories | Consuming repositories' CI, to `terraform init` private modules |
 
-For each App, note the **Client ID** and generate a **private key**. Store them where
-every module repository can read them:
-
-```bash
-# Organisation secrets (private repositories need GitHub Team or above for this).
-gh secret set RELEASE_APP_CLIENT_ID   --org "${OWNER}" --visibility all --body "<client id>"
-gh secret set RELEASE_APP_PRIVATE_KEY --org "${OWNER}" --visibility all < terraform-release-bot.private-key.pem
-```
-
-If organisation secrets are not available, pass `--release-app-client-id` and
-`--release-app-key-file` to the bootstrap script in step 1 instead, every time.
-
-Consuming repositories store the reader App's values as `MODULES_APP_CLIENT_ID`
-(variable) and `MODULES_APP_PRIVATE_KEY` (secret); see
+Note its **Client ID** and generate a **private key**. Consuming repositories store
+them as `MODULES_APP_CLIENT_ID` (variable) and `MODULES_APP_PRIVATE_KEY` (secret); see
 [upgrade-module-version.md](upgrade-module-version.md).
 
 ### 1. Create the repository
@@ -190,7 +177,7 @@ The last line of the description is what makes the first release `1.0.0` instead
 
 ### 5. Merge into dev, then promote
 
-Wait for `ci / CI passed` and one approval from `@${OWNER}/${TEAM}`, then squash merge
+Wait for the `workflow.yml` checks and one approval from `@${OWNER}/${TEAM}`, then squash merge
 from the pull request page or with `gh pr merge --squash`. Then open the promotion:
 
 ```bash

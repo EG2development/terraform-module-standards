@@ -17,10 +17,6 @@
 #   --visibility public|private   Default: private
 #   --template OWNER/REPO    Template repository (default: OWNER/terraform-aws-module-template)
 #   --dest DIR               Where to clone (default: ./terraform-aws-NAME)
-#   --release-app-client-id ID     Set the RELEASE_APP_CLIENT_ID repository secret
-#   --release-app-key-file PATH    Set the RELEASE_APP_PRIVATE_KEY repository secret from a file
-#   --release-app-slug SLUG  GitHub App that release-please runs as (default: terraform-bot-release);
-#                            it becomes the only actor allowed to create release tags and to push to dev
 #   --configure-only         Skip creation; apply settings and rulesets to an existing repository
 #   --dry-run                Print every command instead of running it
 #   -h, --help               Show this help
@@ -29,7 +25,7 @@
 set -euo pipefail
 
 OWNER=""; NAME=""; TEAM=""; DESCRIPTION=""; VISIBILITY="private"; TEMPLATE=""; DEST=""
-APP_CLIENT_ID=""; APP_KEY_FILE=""; RELEASE_APP_SLUG="terraform-bot-release"; CONFIGURE_ONLY=false; DRY_RUN=false
+CONFIGURE_ONLY=false; DRY_RUN=false
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RULESETS_DIR="${HERE}/../rulesets"
 
@@ -48,9 +44,6 @@ while [ $# -gt 0 ]; do
     --visibility) VISIBILITY="$2"; shift 2 ;;
     --template) TEMPLATE="$2"; shift 2 ;;
     --dest) DEST="$2"; shift 2 ;;
-    --release-app-client-id) APP_CLIENT_ID="$2"; shift 2 ;;
-    --release-app-key-file) APP_KEY_FILE="$2"; shift 2 ;;
-    --release-app-slug) RELEASE_APP_SLUG="$2"; shift 2 ;;
     --configure-only) CONFIGURE_ONLY=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -207,26 +200,12 @@ log "Immutable releases (tag and assets locked once published)"
 run gh api -X PUT "repos/${FULL}/immutable-releases" > /dev/null || warn "could not enable immutable releases"
 
 log "Rulesets"
-# The release App is the only actor allowed to create release tags and to push
-# the main -> dev sync. Its App ID replaces the placeholder actor_id 0 in the
-# ruleset files. Without it the tag "creation" rule would lock release-please
-# out, so that rule and the placeholder are dropped, with a warning.
-APP_ID=""
-if [ "$OWNER_TYPE" = "Organization" ] && ! $DRY_RUN; then
-  APP_ID="$(gh api "orgs/${OWNER}/installations" --jq ".installations[] | select(.app_slug == \"${RELEASE_APP_SLUG}\") | .app_id" 2> /dev/null | head -1 || true)"
-fi
-[ -n "$APP_ID" ] || $DRY_RUN || warn "GitHub App '${RELEASE_APP_SLUG}' is not installed on ${OWNER}; release tags stay creatable by anyone with write access (see --release-app-slug)"
-with_app_id() {
-  if [ -n "$APP_ID" ]; then
-    jq --argjson id "$APP_ID" '(.bypass_actors[] | select(.actor_type == "Integration" and .actor_id == 0) | .actor_id) = $id' "$1"
-  else
-    jq 'del(.bypass_actors[] | select(.actor_type == "Integration" and .actor_id == 0)) | if .target == "tag" then del(.rules[] | select(.type == "creation")) else . end' "$1"
-  fi
-}
+# release-please creates release tags as GitHub Actions (GITHUB_TOKEN), so the tag
+# ruleset blocks deletion and updates but not creation.
 apply_ruleset() {
   local file="$1" name id="" body
   name="$(jq -r .name "$file")"
-  body="$(with_app_id "$file")"
+  body="$(cat "$file")"
   if ! $DRY_RUN; then
     id="$(gh api "repos/${FULL}/rulesets" --jq ".[] | select(.name == \"${name}\") | .id" 2> /dev/null || true)"
     [[ "$id" =~ ^[0-9]+$ ]] || id=""
@@ -244,18 +223,9 @@ for f in "${RULESETS_DIR}/dev.json" "${RULESETS_DIR}/main.json" "${RULESETS_DIR}
   apply_ruleset "$f" || warn "ruleset $(basename "$f") was not applied; check the plan and your permissions"
 done
 
-if [ -n "$APP_CLIENT_ID" ] || [ -n "$APP_KEY_FILE" ]; then
-  log "Release GitHub App secrets"
-  [ -n "$APP_CLIENT_ID" ] && run gh secret set RELEASE_APP_CLIENT_ID --repo "$FULL" --body "$APP_CLIENT_ID"
-  if [ -n "$APP_KEY_FILE" ]; then
-    [ -f "$APP_KEY_FILE" ] || die "key file not found: $APP_KEY_FILE"
-    if $DRY_RUN; then echo "+ gh secret set RELEASE_APP_PRIVATE_KEY --repo ${FULL} < ${APP_KEY_FILE}"; else
-      gh secret set RELEASE_APP_PRIVATE_KEY --repo "$FULL" < "$APP_KEY_FILE"
-    fi
-  fi
-else
-  echo "release App secrets not set here; they must exist as organisation secrets or be set with gh secret set"
-fi
+log "Actions: let workflows open pull requests (release-please runs as GITHUB_TOKEN)"
+run gh api -X PUT "repos/${FULL}/actions/permissions/workflow" -F can_approve_pull_request_reviews=true \
+  || warn "could not allow GitHub Actions to create pull requests; an organisation policy may forbid it"
 
 log "Done. Next steps"
 cat <<NEXT

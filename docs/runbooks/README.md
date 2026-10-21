@@ -14,5 +14,6 @@ the commands.
 | [migrate-existing-module.md](migrate-existing-module.md) | A module living inside a project repository is moving to its own repository |
 | [upgrade-module-version.md](upgrade-module-version.md) | A consuming repository is moving to a newer module version |
 | [troubleshooting.md](troubleshooting.md) | Something in CI, release-please or `terraform init` is not behaving |
+| [adr-maintenance.md](adr-maintenance.md) | You are turning on or checking Copilot code review of decision records in `docs/decisions/` |
 
 The rules behind the runbooks are in [the standard](../standard.md).

@@ -1,4 +1,4 @@
-# Keeps the pinned actions in the shared workflows current. Each PR title is a
+# Keeps the pinned actions in this repository's workflow current. Each PR title is a
 # Conventional Commit ("ci: bump ..."), so it passes the PR title check.
 version: 2
 updates:

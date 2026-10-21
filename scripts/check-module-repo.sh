@@ -31,9 +31,11 @@ check_file() { if [ -f "$1" ]; then pass "$1 exists"; else fail "$1 is missing";
 
 echo "== Files (in $(pwd))"
 for f in README.md LICENSE CONTRIBUTING.md CHANGELOG.md SECURITY.md main.tf variables.tf outputs.tf versions.tf \
-         .gitignore .tflint.hcl .terraform-docs.yml .markdownlint-cli2.jsonc release-please-config.json .release-please-manifest.json \
+         .gitignore .tflint.hcl .terraform-docs.yml .terraform-version .markdownlint-cli2.jsonc release-please-config.json .release-please-manifest.json \
          .github/CODEOWNERS .github/PULL_REQUEST_TEMPLATE.md .github/dependabot.yml \
-         .github/workflows/ci.yml .github/workflows/release-please.yml; do
+         .github/workflows/workflow.yml .github/workflows/release-please.yml \
+         .github/instructions/adr-review.instructions.md \
+         .github/skills/code-review/SKILL.md AGENTS.md configs/checkov.yml; do
   check_file "$f"
 done
 if ls examples/*/main.tf > /dev/null 2>&1; then pass "at least one example under examples/"; else fail "no examples/<name>/main.tf"; fi
@@ -42,6 +44,8 @@ if [ -f examples/basic/main.tf ] && [ -f examples/complete/main.tf ]; then pass 
 for q in tutorials how-to reference explanation; do
   if ls "docs/$q"/*.md > /dev/null 2>&1; then pass "docs/$q has a page"; else fail "docs/$q has no page (Diataxis: tutorial, how-to, reference, explanation)"; fi
 done
+for f in docs/decisions/README.md docs/decisions/adr-template.md; do check_file "$f"; done
+[ -f .github/instructions/adr-review.instructions.md ] && { grep -q '^excludeAgent: "cloud-agent"$' .github/instructions/adr-review.instructions.md && pass "adr-review.instructions.md is scoped to Copilot code review" || fail "adr-review.instructions.md lacks 'excludeAgent: \"cloud-agent\"' (copy it from the template)"; }
 if [ -f providers.tf ]; then fail "providers.tf present: a module must not configure providers"; fi
 
 echo "== Terraform module rules"
@@ -91,11 +95,27 @@ fi
 [ -f CHANGELOG.md ] && { head -1 CHANGELOG.md | grep -q '^# Changelog' && pass "CHANGELOG.md starts with '# Changelog'" || fail "CHANGELOG.md must start with '# Changelog' (release-please inserts entries under it)"; }
 
 echo "== Workflows and ownership"
-[ -f .github/workflows/ci.yml ] && { grep -q 'terraform-module-standards/.github/workflows/terraform-ci.yml@' .github/workflows/ci.yml && pass "ci.yml calls the shared terraform-ci workflow" || fail "ci.yml does not call terraform-module-standards/.github/workflows/terraform-ci.yml"; }
-[ -f .github/workflows/release-please.yml ] && { grep -q 'terraform-module-standards/.github/workflows/terraform-release.yml@' .github/workflows/release-please.yml && pass "release-please.yml calls the shared terraform-release workflow" || fail "release-please.yml does not call terraform-module-standards/.github/workflows/terraform-release.yml"; }
-[ -f .github/workflows/release-please.yml ] && { grep -q 'workflow_dispatch' .github/workflows/release-please.yml && pass "release-please.yml can be rerun with workflow_dispatch" || warn "release-please.yml has no workflow_dispatch trigger (needed to rerun a failed release or the dev sync)"; }
-[ -f .github/workflows/ci.yml ] && { grep -Eq 'branches: *\[ *dev' .github/workflows/ci.yml && pass "ci.yml runs on pushes to dev" || warn "ci.yml does not run on pushes to dev (push: branches: [dev, main])"; }
+# Nothing is called from terraform-module-standards, and every reusable workflow is local.
+if grep -rqs 'terraform-module-standards' .github/workflows; then fail "a workflow still references terraform-module-standards; every workflow must be local"; else pass "no workflow references terraform-module-standards"; fi
+OTHER_USES="$(grep -rhsE '^\s+uses: [^ ]+/\.github/workflows/' .github/workflows | grep -vE 'uses: \./\.github/workflows/' || true)"
+[ -z "$OTHER_USES" ] && pass "every reusable workflow is local" || fail "a workflow calls a reusable workflow from another repository: $(echo "$OTHER_USES" | tr -s ' ' | tr '\n' ';')"
+# One CI workflow, workflow.yml; a second one would repeat its checks.
+[ -f .github/workflows/ci.yml ] && fail ".github/workflows/ci.yml exists; every check belongs in workflow.yml" || pass "no ci.yml beside workflow.yml"
+if [ -f .terraform-version ] && [ -f .github/workflows/workflow.yml ]; then
+  PIN="$(tr -d '[:space:]' < .terraform-version)"; FLOOR="$(grep -oE 'terraform: \["[0-9.]+"' .github/workflows/workflow.yml | grep -oE '[0-9.]+' | head -1)"
+  [ "$PIN" = "$FLOOR" ] && pass ".terraform-version ($PIN) matches the first Terraform version CI tests" || fail ".terraform-version ($PIN) differs from the first matrix.terraform entry in workflow.yml (${FLOOR:-none})"
+fi
+[ -f .github/workflows/release-please.yml ] && { grep -q 'googleapis/release-please-action@' .github/workflows/release-please.yml && grep -q 'token: ${{ secrets.GITHUB_TOKEN }}' .github/workflows/release-please.yml && pass "release-please.yml runs release-please with GITHUB_TOKEN" || fail "release-please.yml must run googleapis/release-please-action with token: \${{ secrets.GITHUB_TOKEN }}"; }
+[ -f .github/workflows/release-please.yml ] && { grep -q 'target-branch: main' .github/workflows/release-please.yml && pass "release-please opens its release pull request against main" || fail "release-please.yml lacks 'target-branch: main'; with dev as the default branch the release pull request would target dev"; }
 [ -f .github/dependabot.yml ] && { grep -q 'target-branch: dev' .github/dependabot.yml && pass "Dependabot version updates target dev" || warn "dependabot.yml has no 'target-branch: dev'; version updates would target the default branch"; }
+if [ -f configs/checkov.yml ] && [ -f README.md ]; then
+  # Each module-specific AWS skip is justified in the README's Security scanning table.
+  UNJUSTIFIED=""
+  for id in $(grep -oE '^\s+- CKV2?_AWS_[0-9]+' configs/checkov.yml | awk '{print $2}'); do
+    grep -q "\`${id}\`" README.md || UNJUSTIFIED="${UNJUSTIFIED} ${id}"
+  done
+  [ -z "$UNJUSTIFIED" ] && pass "every AWS Checkov skip in configs/checkov.yml is justified in README.md" || fail "AWS Checkov skips not justified in README.md:${UNJUSTIFIED}"
+fi
 if [ -f .github/CODEOWNERS ]; then
   grep -Eq '^\*\s+@' .github/CODEOWNERS && pass "CODEOWNERS has a default owner" || warn "CODEOWNERS has no '* @owner' rule yet; add the owning team once it exists"
 fi
@@ -159,7 +179,6 @@ if [ -n "$REPO" ]; then
         printf '%s' "$BR" | jq -e '.conditions.ref_name.include | index("refs/heads/main")' > /dev/null && pass "main ruleset targets refs/heads/main by name" || warn "main ruleset targets '$(printf '%s' "$BR" | jq -r '.conditions.ref_name.include | join(",")')' rather than refs/heads/main"
         printf '%s' "$BR" | jq -e '.enforcement == "active"' > /dev/null && pass "branch ruleset '$(printf '%s' "$BR" | jq -r .name)' is active" || fail "branch ruleset is not active"
         printf '%s' "$BR" | jq -e '[.rules[] | select(.type == "pull_request")] | length > 0' > /dev/null && pass "ruleset requires a pull request" || fail "ruleset has no pull_request rule"
-        printf '%s' "$BR" | jq -e '[.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | select(.context == "ci / CI passed")] | length > 0' > /dev/null && pass "ruleset requires 'ci / CI passed'" || fail "ruleset does not require the status check 'ci / CI passed'"
         printf '%s' "$BR" | jq -e '[.rules[] | select(.type == "deletion")] | length > 0 and ([.rules[] | select(.type == "non_fast_forward")] | length > 0)' > /dev/null && pass "ruleset blocks deletion and force-push" || fail "ruleset must block deletion and non_fast_forward"
         printf '%s' "$BR" | jq -e '[.rules[] | select(.type == "pull_request") | .parameters.require_code_owner_review] | index(true)' > /dev/null && pass "ruleset requires code owner review" || warn "ruleset does not require code owner review"
       else
@@ -170,7 +189,7 @@ if [ -n "$REPO" ]; then
         TG="$(gh api "repos/${REPO}/rulesets/${TG_ID}")"
         printf '%s' "$TG" | jq -e '.conditions.ref_name.include | index("refs/tags/v*")' > /dev/null && pass "tag ruleset covers refs/tags/v*" || fail "tag ruleset does not include refs/tags/v*"
         printf '%s' "$TG" | jq -e '[.rules[].type] | index("deletion") and index("update")' > /dev/null && pass "tag ruleset blocks deletion and update" || fail "tag ruleset must block deletion and update"
-        printf '%s' "$TG" | jq -e '[.rules[].type] | index("creation")' > /dev/null && pass "tag ruleset restricts creation to the release App" || warn "tag ruleset leaves creation open: anyone with write access can cut a release tag"
+        printf '%s' "$TG" | jq -e '[.rules[].type] | index("creation")' > /dev/null && fail "tag ruleset restricts creation; release-please runs as GITHUB_TOKEN and could not create the release tag" || pass "tag ruleset leaves creation to release-please"
       else
         fail "no tag ruleset on ${REPO}"
       fi
@@ -180,10 +199,8 @@ if [ -n "$REPO" ]; then
       done
       CO_ERR="$(gh api "repos/${REPO}/codeowners/errors" --jq '.errors | length' 2> /dev/null || echo "?")"
       [ "$CO_ERR" = "0" ] && pass "CODEOWNERS has no errors" || warn "CODEOWNERS errors: ${CO_ERR} (gh api repos/${REPO}/codeowners/errors)"
-      SECRETS="$(gh secret list --repo "$REPO" 2> /dev/null | awk '{print $1}' || true)"
-      for s in RELEASE_APP_CLIENT_ID RELEASE_APP_PRIVATE_KEY; do
-        echo "$SECRETS" | grep -qx "$s" && pass "secret ${s} visible to the repository" || warn "secret ${s} not visible to the repository (set it, or provide it as an organisation secret)"
-      done
+      CAN_PR="$(gh api "repos/${REPO}/actions/permissions/workflow" --jq .can_approve_pull_request_reviews 2> /dev/null || echo unknown)"
+      [ "$CAN_PR" = "true" ] && pass "GitHub Actions may create pull requests (release-please needs it)" || fail "'Allow GitHub Actions to create and approve pull requests' is ${CAN_PR}; release-please cannot open the release pull request"
     fi
   fi
 fi
