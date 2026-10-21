@@ -40,8 +40,9 @@ is not a Conventional Commit, fix it first with a `fix:` or `revert:` pull reque
 ```
 
 The description has one `BEGIN_NESTED_COMMIT` … `END_NESTED_COMMIT` block per
-change: the subject and any `BREAKING CHANGE:` or `Release-As:` footer. Check that a breaking change carries its
-`!` or footer, and that a first release carries `Release-As: 1.0.0`.
+change: the subject and any `BREAKING CHANGE:` or `Release-As:` footer. Check that a
+breaking change carries its `!` or footer, and that a first release carries
+`Release-As: 1.0.0`.
 
 ### 3. Open the pull request
 
