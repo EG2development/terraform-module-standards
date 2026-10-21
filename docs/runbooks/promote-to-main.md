@@ -39,8 +39,8 @@ is not a Conventional Commit, fix it first with a `fix:` or `revert:` pull reque
 "${STANDARDS}/scripts/promote.sh" --dry-run
 ```
 
-The description has one block per change: the subject and, under it, any
-`BREAKING CHANGE:` or `Release-As:` footer. Check that a breaking change carries its
+The description has one `BEGIN_NESTED_COMMIT` … `END_NESTED_COMMIT` block per change:
+the subject and any `BREAKING CHANGE:` or `Release-As:` footer. Check that a breaking change carries its
 `!` or footer, and that a first release carries `Release-As: 1.0.0`.
 
 ### 3. Open the pull request
@@ -56,8 +56,7 @@ or if a promotion is already open.
 
 The diff is everything merged into `dev` since the last promotion. The description is
 what release-please will read. Do not edit the description except to remove a change
-that must not ship (then also revert it on `dev`). Never add bullets or indent the
-header lines.
+that must not ship (then also revert it on `dev`). Keep every nested block intact.
 
 ### 5. Squash merge
 
@@ -94,6 +93,6 @@ request's scope by editing its description. After release: fix forward
 | --- | --- | --- |
 | `promote: dev does not contain main` | `main` has not been merged back into `dev` since the last release | Open a pull request from `main` into `dev`, resolve any conflict, and ask an admin to merge it with a merge commit, allowing merge commits in the repository settings for that merge only |
 | `promote: promotion pull request #N is already open` | A previous promotion was not merged | Merge or close it first; the new changes are in it already if it was reopened on the same `dev` |
-| The release pull request misses a change | The promotion was merged with a merge commit, or a header line was edited into a bullet | Edit the merged promotion's description: add a `BEGIN_COMMIT_OVERRIDE` … `END_COMMIT_OVERRIDE` block with every change, one header per line at column 0; rerun the release workflow |
+| The release pull request misses a change, or files a breaking change under the promotion | The promotion was merged with a merge commit, or its description was edited outside the nested blocks, or it came from a `promote.sh` that wrote bare headers | Edit the merged promotion's description: add a `BEGIN_COMMIT_OVERRIDE` … `END_COMMIT_OVERRIDE` block holding the promotion's title line, a blank line, and one `BEGIN_NESTED_COMMIT` … `END_NESTED_COMMIT` block per change (the shape `promote.sh --dry-run` prints); then rerun the latest release-please run (`gh run rerun`) |
 | Wrong bump (minor instead of major) | A breaking change had neither `!` nor a `BREAKING CHANGE:` footer on `dev` | Edit the merged promotion's description with the override block above, adding the footer; rerun |
 | A `workflow.yml` check fails only on the promotion | `dev` was green per pull request but the combination is not (a weekly `latest` run found a new provider behaviour, for example) | Fix on a short-lived branch into `dev`, promote again |

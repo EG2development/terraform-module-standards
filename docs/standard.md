@@ -570,27 +570,36 @@ PR body:   Adds kms_key_arn ...
 
 **Into `main`: squash merge of the promotion pull request, with the generated
 description.** `scripts/promote.sh` writes the description from the squash commits on
-`dev` that `main` lacks: one block per change, oldest first, holding the subject
-(`feat(aurora): add serverless v2 scaling (#10)`) and, directly under it, that commit's
-`BREAKING CHANGE:` and `Release-As:` footers if any. Every header starts at column 0,
-blocks are separated by blank lines, nothing is bulleted. release-please parses each
-block as its own change (its README: "What if my PR contains multiple fixes or
-features?"), so one squash commit on `main` releases exactly what `dev` accumulated,
-with the right bump, while the title `chore(promote): dev to main` adds nothing to the
-changelog. The reviewer reads the same list.
+`dev` that `main` lacks: one `BEGIN_NESTED_COMMIT` … `END_NESTED_COMMIT` block per
+change, oldest first, holding the subject (`feat(aurora): add serverless v2 scaling
+(#10)`) and that commit's `BREAKING CHANGE:` and `Release-As:` footers if any.
+release-please parses each block as its own commit, so one squash commit on `main`
+releases exactly what `dev` accumulated, with the right bump, while the title
+`chore(promote): dev to main` adds only a chore. Bare headers are not enough:
+release-please 17 splits a body only at headers without `!`, so a `feat!:` change and
+its breaking-change note would be attached to the promotion instead. The reviewer reads
+the same list.
 
 ```text
 chore(promote): dev to main (#42)
 
 Promotes 3 change(s) from dev to main. Squash merge only. ...
 
+BEGIN_NESTED_COMMIT
 feat(aurora): add serverless v2 scaling (#10)
+END_NESTED_COMMIT
 
-fix(vpc): correct the private NAT route (#11)
+BEGIN_NESTED_COMMIT
+fix(vpc)!: correct the private NAT route (#11)
+
 BREAKING CHANGE: route table ids are renamed
+END_NESTED_COMMIT
 
+BEGIN_NESTED_COMMIT
 feat: add the sns-alert-topic module (#1)
+
 Release-As: 1.0.0
+END_NESTED_COMMIT
 ```
 
 Why not a merge commit: release-please reads `main` in commit-date order and stops at
@@ -608,9 +617,9 @@ rule), and turns merge commits off again. Its content is what `dev` already revi
 plus the release commit. Nothing else ever reaches `dev` by merge commit.
 
 If a promotion was merged with a wrong description, edit the merged pull request's
-description and add a `BEGIN_COMMIT_OVERRIDE … END_COMMIT_OVERRIDE` block listing the
-changes in the same shape; release-please uses it on its next run. This works for
-squash merges only.
+description and add a `BEGIN_COMMIT_OVERRIDE … END_COMMIT_OVERRIDE` block holding the
+promotion's title line, a blank line, and the nested blocks; release-please uses it on
+its next run (rerun the latest release-please run). This works for squash merges only.
 
 Merge commits and rebase merges are disabled in the repository settings for pull
 requests, except for that one merge from `main` into `dev`.
