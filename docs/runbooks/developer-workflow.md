@@ -48,7 +48,7 @@ never release on their own.
 
 ## Validation
 
-- The pull request shows `ci / CI passed` green.
+- The `workflow.yml` checks on the pull request are green.
 - After merge, `git fetch origin && git log --oneline origin/main..origin/dev` lists
   your change among those waiting for promotion.
 

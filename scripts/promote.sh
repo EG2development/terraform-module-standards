@@ -5,8 +5,8 @@
 #   scripts/promote.sh [--dry-run]
 #
 # What it does:
-#   1. Checks that dev contains main (the release workflow merges main back
-#      into dev after every push; if that has not happened, stop).
+#   1. Checks that dev contains main (main is merged back into dev by a pull
+#      request after each release; if that has not happened, stop).
 #   2. Checks that no promotion pull request is already open.
 #   3. Builds the pull-request description from the squash commits on dev that
 #      main does not have: one Conventional Commit header per change, at column
@@ -33,7 +33,7 @@ REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || die "run insi
 git fetch -q origin main dev || die "could not fetch origin/main and origin/dev; does dev exist?"
 
 if ! git merge-base --is-ancestor origin/main origin/dev; then
-  die "dev does not contain main. The release workflow merges main into dev after every push to main; wait for it, or run it: gh workflow run release-please.yml --ref main --repo ${REPO}"
+  die "dev does not contain main. Open a pull request from main into dev; an admin merges it with a merge commit (allow merge commits for that merge only): gh pr create --repo ${REPO} --base dev --head main --title 'chore(sync): merge main into dev'"
 fi
 
 EXISTING="$(gh pr list --repo "$REPO" --base main --head dev --state open --json number --jq '.[0].number // empty')"

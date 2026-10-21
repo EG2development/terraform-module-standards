@@ -8,8 +8,8 @@ mechanical work; a person reviews and merges one pull request.
 ## Prerequisites
 
 - The repository was created with [create-repository.md](create-repository.md), so
-  `release-please.yml` runs on every push to `main` and the release App secrets are
-  available.
+  `release-please.yml` runs on every push to `main` and GitHub Actions may create
+  pull requests.
 - A promotion pull request ([promote-to-main.md](promote-to-main.md)) carrying at
   least one `feat:`, `fix:` or breaking change has merged into `main` since the last
   release. `docs:`, `chore:`, `refactor:`, `test:` and `ci:` alone release nothing.
@@ -50,7 +50,7 @@ GitHub Release on merge.
 
 ### 3. Merge it
 
-Wait for `ci / CI passed` and one approval, then squash merge. Within a minute
+Wait for the `workflow.yml` checks and one approval, then squash merge. Within a minute
 release-please creates the tag `vX.Y.Z` and the GitHub Release.
 
 ### 4. Tell consumers
@@ -85,13 +85,14 @@ gh api "repos/${OWNER}/${REPO}/contents/.release-please-manifest.json" --jq '.co
 ```
 
 The release exists, the tag points at the squash commit of the release pull request,
-and the manifest holds the new version. Then:
+and the manifest holds the new version. Then merge the release back into `dev`: open a
+pull request from `main` into `dev`; an admin allows merge commits in the repository
+settings, merges it with a merge commit, and turns merge commits off again. Afterwards
+this prints `dev contains main`:
 
 ```bash
 git fetch origin && git merge-base --is-ancestor origin/main origin/dev && echo "dev contains main"
 ```
-
-The `sync dev with main` job merged the release commit back into `dev`.
 
 ## Rollback
 
@@ -110,8 +111,9 @@ withdraw a release:
 | --- | --- | --- |
 | No release pull request after merging | No `feat`/`fix`/breaking commit since the last release, or the squash commit title is not a Conventional Commit | `git log --oneline vLAST..main`; a bad title cannot be rewritten on `main`, so merge an empty `fix:` pull request that describes the change |
 | A change merged into `dev` is missing from the release pull request | The promotion was merged with a merge commit, or its description lost the line | Edit the merged promotion pull request's description: add a `BEGIN_COMMIT_OVERRIDE` … `END_COMMIT_OVERRIDE` block listing every change, one header per line at column 0; rerun the release workflow ([promote-to-main.md](promote-to-main.md), Troubleshooting) |
-| `promote.sh` says `dev does not contain main` | The `sync dev with main` job has not run or failed | `gh workflow run release-please.yml --ref main`; on a conflict, open a pull request from `main` into `dev` and merge it with a merge commit |
-| Release pull request has no status checks and cannot merge | release-please ran as `GITHUB_TOKEN` | Check the `RELEASE_APP_*` secrets reach the repository; `gh secret list --repo ${OWNER}/${REPO}` |
+| `promote.sh` says `dev does not contain main` | `main` has not been merged back into `dev` since the last release | Open a pull request from `main` into `dev`; an admin allows merge commits in the repository settings, merges it with a merge commit (a squash would not make `main` part of `dev`'s history), and turns merge commits off again |
+| Release pull request shows no status checks | Expected: release-please runs as `GITHUB_TOKEN`, and pull requests it opens start no workflows | Review the changelog and merge; no check is required |
 | Version is wrong | A title said `feat` where `fix` was meant, or `!` was missing | Add a footer in a follow-up pull request: `Release-As: X.Y.Z` |
-| The release workflow failed on "Resource not accessible by integration" | The App lacks a permission | Add Contents, Pull requests and Issues read/write to the App and re-run |
+| The release workflow failed on "Resource not accessible by integration" | The release job lacks a write permission | Keep the `permissions` block in `release-please.yml`; check no organisation policy caps it, then re-run |
+| "GitHub Actions is not permitted to create or approve pull requests" | The repository or organisation setting is off | Settings → Actions → General → Workflow permissions: allow GitHub Actions to create and approve pull requests, then re-run |
 | Tag created, no GitHub Release | Workflow was interrupted between the two steps | Re-run the workflow from the Actions tab; release-please is idempotent |

@@ -22,12 +22,11 @@ Find your symptom. Each row names where the fix lives.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| The ruleset waits for `ci / CI passed` and it never appears | The caller job in `ci.yml` is not called `ci`, or the shared workflow's final job was renamed | The caller job id must be `ci` and have no `name:`; the check name is `<caller job> / <called job name>` |
 | `PR title` fails | Title is not `type(scope)!: description` with an allowed type | Retitle. Types: `feat fix docs chore refactor test ci revert` |
 | `Docs` fails with a diff | README tables are stale | `terraform-docs .`, commit `README.md` |
-| `Test (Terraform <minimum>)` fails, `latest` passes | A feature newer than `required_version` | Avoid it, or raise the minimum in a `feat!:` pull request and raise `terraform-min-version` in `ci.yml` |
-| `Lint`: `Failed to install a plugin` or rate limit | TFLint could not download the AWS ruleset | The shared workflow passes `GITHUB_TOKEN`; locally set `GITHUB_TOKEN=$(gh auth token)` |
-| `Security scan` fails on a check you accept | Checkov finding | Add the ID to `checkov-skip-checks` in `ci.yml` **and** justify it in the README under Security scanning |
+| `Test (Terraform <minimum>)` fails, `latest` passes | A feature newer than `required_version` | Avoid it, or raise the minimum in a `feat!:` pull request and raise the first `matrix.terraform` entry in `workflow.yml` |
+| `tflint`: `Failed to install a plugin` or rate limit | TFLint could not download the AWS ruleset named in `.tflint.hcl` | Re-run the job; locally set `GITHUB_TOKEN=$(gh auth token)` |
+| `checkov` fails on a check you accept | Checkov finding | Add the ID to `skip-check` in `configs/checkov.yml` **and** justify it in the README under Security scanning |
 | Every job fails within seconds with no steps | Actions billing or quota for the owner, not the code | Run the checks locally; fix billing; re-run |
 | `terraform init`: `Unsupported Terraform Core version` | Terraform older than 1.16, the floor of every module | Upgrade Terraform to 1.16 or later |
 | `Invalid count argument` | `count` depends on a value unknown at plan time | Drive it from a `bool` input |
@@ -38,20 +37,17 @@ Find your symptom. Each row names where the fix lives.
 | --- | --- | --- |
 | No release pull request after a merge | No `feat`/`fix`/breaking commit since the last tag, or the squash title is not a Conventional Commit | `git log --oneline $(git describe --tags --abbrev=0)..main`; merge an empty `fix:` pull request describing the change |
 | First release pull request says `0.1.0` | The `terraform-module` strategy starts at 0.1.0 and the `Release-As: 1.0.0` footer was missing or not last | Merge a small `fix:` pull request whose description ends with `Release-As: 1.0.0` |
-| Release pull request has no checks, cannot merge | release-please ran as `GITHUB_TOKEN`; pull requests it opens never trigger workflows | `gh secret list --repo ${OWNER}/${REPO}` must show `RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY`, as repository or organisation secrets |
-| Release workflow: `Resource not accessible by integration` | The App lacks Contents, Pull requests or Issues write | Add the permission on the App, accept it on the installation, re-run |
+| Release pull request shows no checks | Expected: release-please runs as `GITHUB_TOKEN`, and pull requests it opens start no workflows | Review and merge; no check is required |
+| Release workflow: `Resource not accessible by integration` | The release job lacks contents or pull-requests write | Keep the `permissions` block in `release-please.yml`; check no organisation policy caps it. If it fails while labelling the release pull request, add `issues: write` |
+| Release workflow: `GitHub Actions is not permitted to create or approve pull requests` | The repository or organisation setting is off | `gh api -X PUT repos/${OWNER}/${REPO}/actions/permissions/workflow -F can_approve_pull_request_reviews=true`, or tick it under Settings → Actions → General |
 | README `version = "~> 1.0"` appeared or a provider pin in the README changed | The `terraform-module` strategy rewrites the first `version = "~> X.Y"` in `README.md` | Never write `~>` constraints in the README. Use `>=` in prose and tables |
 | `versions.tf` changed in the release pull request | The strategy rewrites every `vX.Y.Z` string in `versions.tf` | Remove the string (comments included); `check-module-repo.sh` flags it |
 | Breaking change released as minor | `!` missing from the title and no `BREAKING CHANGE:` footer, or the repository merges with "pull request title" only | Set the squash default to title + description (`new-module-repo.sh --configure-only`); add `Release-As: N.0.0` in a follow-up |
 | Extra, unexpected changelog entries | Lines in the pull-request description that look like `fix: ...` are parsed as commits | Write descriptions in prose; edit the release pull-request description to remove them |
 | Tag created but no GitHub Release | Workflow interrupted | Re-run the release workflow; it is idempotent |
 | A change merged into `dev` is missing from the release pull request, or the bump is too small | The promotion was merged with a merge commit (release-please reads `main` in commit-date order and stops at the last release), or a header line in its description was bulleted or indented | Edit the merged promotion's description: `BEGIN_COMMIT_OVERRIDE` … `END_COMMIT_OVERRIDE` with one header per line at column 0; rerun the release workflow. Squash merge promotions, always |
-| `Source branch` fails on a pull request into `main` | The pull request's head is not `dev` or release-please's branch; `main` accepts no other source | `gh pr edit <n> --base dev`, merge it there, then `scripts/promote.sh` |
-| The release workflow's `push to main came from dev or release-please` job is red | Someone pushed to `main` directly, or GitHub had not yet linked the squash commit to its pull request | Look at the commit. A direct push: revert it through a pull request into `dev` and promote. A late link: rerun the workflow. The release and sync jobs were not blocked either way |
-| `promote.sh`: `dev does not contain main` | The `sync dev with main` job has not run since the last push to `main`, or failed | `gh workflow run release-please.yml --ref main --repo ${OWNER}/${REPO}`; check the run |
-| `sync dev with main` job: `main does not merge cleanly into dev` | A pull request into `dev` changed a line release-please also rewrites (the README usage pin, `CHANGELOG.md`) | Open a pull request from `main` into `dev`, resolve the conflict, have an admin merge it with a merge commit; keep release-please-owned lines untouched on `dev` |
-| A release workflow run ends `startup_failure` with no jobs; the merged release pull request is not tagged | A job in the shared workflow asks for a `GITHUB_TOKEN` permission the caller's `release-please.yml` does not grant (callers grant `contents: read`); GitHub refuses the whole run, whatever the job's `if` | Fix the shared workflow (the standards CI's permission check catches it), then `gh workflow run release-please.yml --ref main --repo ${OWNER}/${REPO}`: release-please tags the merged pull request and the sync runs |
-| Two release workflow runs for one push, or a run queued behind another | Expected: the job's concurrency group serialises runs per repository and never cancels one | Nothing; the queued run finds nothing new to do |
+| `promote.sh`: `dev does not contain main` | `main` has not been merged back into `dev` since the last release | Open a pull request from `main` into `dev`; an admin allows merge commits in the repository settings, merges it with a merge commit (a squash would not make `main` part of `dev`'s history), and turns merge commits off again |
+| The `main` → `dev` pull request conflicts | A pull request into `dev` changed a line release-please also rewrites (the README usage pin, `CHANGELOG.md`) | Resolve the conflict in that pull request; an admin merges it with a merge commit; keep release-please-owned lines untouched on `dev` |
 
 ### Repository settings
 
@@ -61,7 +57,6 @@ Find your symptom. Each row names where the fix lives.
 | Creating a ruleset fails with "Upgrade to GitHub Pro or make this repository public to enable this feature" | Private repository on GitHub Free: rulesets are not available | Make the repository public or move the organisation to GitHub Team; `gh api repos/${OWNER}/${REPO}/rules/branches/main` lists what is in effect |
 | CODEOWNERS review is never requested | Team has no write access, or the team name is wrong | `gh api repos/${OWNER}/${REPO}/codeowners/errors`; grant the team maintain access |
 | `gh api ... --input rulesets/main.json` returns 422 | A read-only field (`id`, `source`) in the JSON, or a ruleset with that name already exists | Use the files from `terraform-module-standards/rulesets/`; the script updates an existing ruleset by name |
-| Reusable workflow: `workflow was not found` or `is not accessible` | The standards repository is private and not shared with the organisation, or the plan does not allow it | `gh api -X PUT repos/${OWNER}/terraform-module-standards/actions/permissions/access -f access_level=organization`; or make it public |
 
 ### Consumers
 

@@ -1,5 +1,6 @@
-# Checks for this repository: the shared workflows, the scripts, the rulesets
-# and the documentation. Nothing here touches a cloud account.
+# Checks for this repository: the scripts, the rulesets, this workflow and the
+# documentation. Nothing here touches a cloud account. Module repositories do not
+# call anything here; each carries its own workflows.
 name: CI
 
 on:
@@ -35,27 +36,6 @@ jobs:
             echo "ok $f"
           done
 
-      - name: Shared workflows ask for no more than their callers grant
-        # A called workflow cannot raise the caller's GITHUB_TOKEN permissions;
-        # a job that asks for more fails every run at startup. The grants are
-        # those of the callers in terraform-aws-module-template.
-        run: |
-          check() {
-            BAD="$(yq -o=json '.jobs' "$1" | jq -r --argjson grant "$2" '
-              def rank: {"none": 0, "read": 1, "write": 2}[.];
-              to_entries[] | .key as $job | (.value.permissions // {})
-              | if type == "object" then to_entries[] else {key: "all", value: sub("-all$"; "")} end
-              | select((($grant[.key] // "none") | rank) < (.value | rank))
-              | "\($job) asks for \(.key): \(.value)"')"
-            if [ -n "$BAD" ]; then
-              while read -r line; do echo "::error file=$1::$line, more than the callers grant"; done <<< "$BAD"
-              return 1
-            fi
-            echo "ok $1"
-          }
-          check .github/workflows/terraform-ci.yml '{"contents": "read", "pull-requests": "read"}'
-          check .github/workflows/terraform-release.yml '{"contents": "read"}'
-
       - name: Shell scripts
         run: |
           shellcheck -S warning scripts/*.sh
@@ -76,9 +56,7 @@ jobs:
           globs: "**/*.md"
 
   ci-ok:
-    # Named to match the status check the shared ruleset requires. In module
-    # repositories the same name comes from calling the reusable workflow from a
-    # job called "ci".
+    # Named to match the status check this repository's main ruleset requires.
     name: ci / CI passed
     if: always()
     needs: [pr-title, check]
