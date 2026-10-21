@@ -50,7 +50,13 @@ BODY="$(
   printf 'Promotes %s change(s) from dev to main. Squash merge only. The lines below are what release-please reads from the squash commit.\n' "$COUNT"
   for sha in $(git rev-list --reverse --no-merges origin/main..origin/dev); do
     printf '\n%s\n' "$(git log -1 --format=%s "$sha")"
-    git log -1 --format=%b "$sha" | grep -iE '^(BREAKING[- ]CHANGE|Release-As): ' || true
+    # A footer runs on to the next blank line or footer token, so keep its
+    # continuation lines: a wrapped BREAKING CHANGE note would be cut short.
+    git log -1 --format=%b "$sha" | awk '
+      tolower($0) ~ /^(breaking[- ]change|release-as): / { keep = 1; print; next }
+      /^$/ || /^[A-Za-z-]+(: | #)/                        { keep = 0 }
+      keep                                                { print }
+    '
   done
 )"
 
